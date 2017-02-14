@@ -74,8 +74,7 @@ import logging
 
 from weakref import WeakSet
 
-from tera_atf.core_libs.atf_logging import init_logger
-from . import netem_exceptions
+import simple_netem_exceptions
 
 __version__ = '0.0.1'
 
@@ -84,15 +83,30 @@ if DEBUG:
     loglevel = logging.DEBUG
 else:
     loglevel = logging.WARN
+    
+
+
+
 
 # ip and tc command prefixes
-netem_del = 'tc qdisc del dev'
-netem_add = 'tc qdisc add dev'
+netem_del = 'sudo tc qdisc del dev'
+netem_add = 'sudo tc qdisc add dev'
 netem_stat = 'tc -s qdisc show dev'
-iface_ctrl = 'ip link set dev'
+iface_ctrl = 'sudo ip link set dev'
 iface_stat = 'ip link show dev'
 iface_list = 'ip link show'
 
+def get_logger():
+    """
+    get a logging objects
+    """
+    logger = logging.getLogger(__name__)
+    console = logging.StreamHandler()
+    console.setFormatter('%(asctime)s %(name)s %(levelname)-6s: %(message)s')
+    console.setLevel(loglevel)
+    logger.addHandler(console)
+    return logger
+ 
 def get_etherfaces(xclude_wlan=True, xclude_loopback=True):
     """
     get a list of network interface names from the system
@@ -114,9 +128,9 @@ def get_etherfaces(xclude_wlan=True, xclude_loopback=True):
 
     if returncode:
         if 'supported' in error:
-            raise netem_exceptions.NetemNotSupportedException(output, error)
+            raise simple_netem_exceptions.NetemNotSupportedException(output, error)
         else:
-            raise netem_exceptions.NetemGeneralException(output, error)
+            raise simple_netem_exceptions.NetemGeneralException(output, error)
 
     for etherface in output.split('\n'):
         if xclude_wlan and 'wlan' in etherface:
@@ -133,7 +147,7 @@ def get_etherfaces(xclude_wlan=True, xclude_loopback=True):
     return etherfaces
 
 
-def do_this(cmd, sudo_pwd=sudo_pwd_default):
+def do_this(cmd):
     """
     execute a system command
 
@@ -228,7 +242,7 @@ class NetemInterface(object):
 
     """
     def __init__(self, side, ctrl_fqdn=None, ctrl_port=None, iface=None,
-                 sudo_pwd=sudo_pwd_default):
+                 logger=None):
         """
         :param side:
             the position of the interface controlled by this instance relative
@@ -272,13 +286,6 @@ class NetemInterface(object):
             this paramater is mandatory and used strictly for logging
             purposes
 
-        :param sudo_pwd:
-            the system password used for commands that require elevated
-            privileges
-
-            it is preferrable that the **netem node** is configured in a way
-            that does not require this password
-
         :raises:
             NetemInsufficientInterfaces exception,
             NetemInvalidInterfaceException exception
@@ -293,25 +300,21 @@ class NetemInterface(object):
         self.last_error = ''
 
         if not side:
-            raise netem_exceptions.NetemSideException()
+            raise simple_netem_exceptions.NetemSideException()
         self.side = side
 
         if not ctrl_fqdn:
-            raise netem_exceptions.NetemCtrlFqdnException()
+            raise simple_netem_exceptions.NetemCtrlFqdnException()
         self.ctrl_fqdn = ctrl_fqdn
 
         if not ctrl_port:
-            raise netem_exceptions.NetemCtrlPortException()
+            raise simple_netem_exceptions.NetemCtrlPortException()
         self.ctrl_port = ctrl_port
 
         self.sudo_pwd = sudo_pwd
         self.iface = self.__iface__(side, iface)
-        self.logger = init_logger('netem_ctrl_{}_{}'.format(self.side,
-                                                            self.iface),
-                                  formatstr='%(asctime)s %(name)s %(levelname)-6s: %(message)s',
-                                  loglevel=loglevel,
-                                  log_to_file=True,
-                                  silent=False)
+        if logger is None:
+            self.logger = get_logger()
 
         all_ifaces = get_etherfaces()
 
@@ -322,7 +325,7 @@ class NetemInterface(object):
             self.last_error = \
 '''netem node does not have enough interfaces, need at least 2 ethernet
 interfaces'''
-            raise netem_exceptions.NetemInsufficientInterfaces()
+            raise simple_netem_exceptions.NetemInsufficientInterfaces()
 
         # bad interface name, do we need to raise or not?
         if self.iface not in all_ifaces.keys():
@@ -331,7 +334,7 @@ interfaces'''
             self.last_error = '''invalid interface specification {}'''.format(
                                                                      self.iface
                                                                      )
-            raise netem_exceptions.NetemInvalidInterface(
+            raise simple_netem_exceptions.NetemInvalidInterface(
                                                             self.iface,
                                                             all_ifaces.keys()
                                                             )
@@ -685,7 +688,7 @@ interfaces'''
             self.logger.debug(cmd)
         else:
             if delay:
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                                             bad_parm='delay',
                                             bad_val=delay,
                                             accepts='must be a dictionary'
@@ -701,7 +704,7 @@ interfaces'''
             self.logger.debug(cmd)
         else:
             if reorder:
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                                             bad_parm='reorder',
                                             bad_val=reorder,
                                             accepts='must be a dictionary'
@@ -712,7 +715,7 @@ interfaces'''
             self.logger.debug(cmd)
         else:
             if corrupt:
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                                             bad_parm='corrupt',
                                             bad_val=corrupt,
                                             accepts='must be a dictionary'
@@ -723,7 +726,7 @@ interfaces'''
             self.logger.debug(cmd)
         else:
             if duplicate:
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                                             bad_parm='duplicate',
                                             bad_val=duplicate,
                                             accepts='must be a dictionary'
@@ -734,7 +737,7 @@ interfaces'''
             self.logger.debug(cmd)
         else:
             if rate:
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                                             bad_parm='rate',
                                             bad_val=rate,
                                             accepts='must be a dictionary'
@@ -750,7 +753,7 @@ interfaces'''
             self.logger.debug(cmd)
         else:
             if loss_random:
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                                             bad_parm='loss_random',
                                             bad_val=loss_random,
                                             accepts='must be a dictionary'
@@ -765,7 +768,7 @@ interfaces'''
             self.logger.debug(cmd)
         else:
             if loss_gemodel:
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                                             bad_parm='loss_gemodel',
                                             bad_val=loss_gemodel,
                                             accepts='must be a dictionary'
@@ -775,7 +778,7 @@ interfaces'''
             cmd = '{} {}'.format(cmd, NetemLossState(**loss_state).loss_state)
         else:
             if loss_state:
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                                             bad_parm='loss_state',
                                             bad_val=loss_state,
                                             accepts='must be a dictionary'
@@ -807,7 +810,7 @@ interfaces'''
                 return ret, out
         else:
             if limit:
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                                             bad_parm='limit',
                                             bad_val=limit,
                                             accepts='must be a dictionary'
@@ -885,7 +888,7 @@ class NetemLossRandom(object):
         for v in ['percent', 'correlation', ]:
             if eval(v) and not isinstance(eval(v), (int, long, float)) or \
                 not 0 <= eval(v) <= 100:
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                             bad_parm=v,
                             bad_val=eval(v),
                             accepts='must be numeric and between 0 and 100'
@@ -1034,7 +1037,7 @@ class NetemLossState(object):
         """
         if not p_13:
             # cannot be 0
-            raise netem_exceptions.NetemConfigException(
+            raise simple_netem_exceptions.NetemConfigException(
                                     bad_parm='p_13',
                                     bad_val=p_13,
                                     accepts='is mandatory'
@@ -1044,7 +1047,7 @@ class NetemLossState(object):
             if eval(v) and not \
                isinstance(eval(v), (int, long, float)) or \
                not 0 <= eval(v) <= 100:
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                             bad_parm=v,
                             bad_val=eval(v),
                             accepts='must be numeric and between 0 and 100'
@@ -1151,7 +1154,7 @@ class NetemLossGemodel(object):
             NetemConfigException if passed invalid parameters
         """
         if not p:
-            raise netem_exceptions.NetemConfigException(
+            raise simple_netem_exceptions.NetemConfigException(
                                     bad_parm='p',
                                     bad_val=p,
                                     accepts='is mandatory'
@@ -1161,7 +1164,7 @@ class NetemLossGemodel(object):
             if eval(v) and not \
                isinstance(eval(v), (int, long, float)) or \
                not 0 <= eval(v) <= 100:
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                             bad_parm=v,
                             bad_val=eval(v),
                             accepts='must be numeric and between 0 and 100'
@@ -1228,21 +1231,21 @@ class NetemRate(object):
             NetemConfigException if passed invalid parameters
         """
         if not isinstance(rate, (int, long, float)):
-            raise netem_exceptions.NetemConfigException(
+            raise simple_netem_exceptions.NetemConfigException(
                                     bad_parm='rate',
                                     bad_val=rate,
                                     accepts='must be numeric'
                                     )
 
         if rate <= 0:
-            raise netem_exceptions.NetemConfigException(
+            raise simple_netem_exceptions.NetemConfigException(
                                     bad_parm='rate',
                                     bad_val=rate,
                                     accepts='must be greater than 0'
                                     )
 
         if units not in self.valid_units:
-            raise netem_exceptions.NetemConfigException(
+            raise simple_netem_exceptions.NetemConfigException(
                                     bad_parm='units',
                                     bad_val=units,
                                     accepts=self.valid_units
@@ -1294,7 +1297,7 @@ class NetemReorder(object):
             NetemConfigException if passed invalid parameters
         """
         if not percent:
-            raise netem_exceptions.NetemConfigException(
+            raise simple_netem_exceptions.NetemConfigException(
                                                 bad_parm='reorder percent',
                                                 bad_val=percent,
                                                 accepted='must be specified'
@@ -1303,14 +1306,14 @@ class NetemReorder(object):
         for v in ['percent', 'correlation', ]:
             if eval(v) and not isinstance(eval(v), (int, long, float)) or \
                not 0 <= eval(v) <= 100:
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                                     bad_parm=v,
                                     bad_val=eval(v),
                                     accepts='must be numeric and between 0 and 100'
                                     )
 
         if gap and not isinstance(gap, (int, long)) or gap < 0:
-            raise netem_exceptions.NetemConfigException(
+            raise simple_netem_exceptions.NetemConfigException(
                                     bad_parm='gap',
                                     bad_val=gap,
                                     accepts='must be a positive integer'
@@ -1352,7 +1355,7 @@ class NetemDuplicate(object):
         for v in ['percent', 'correlation', ]:
             if eval(v) and not isinstance(eval(v), (int, long, float)) or \
                not 0 <= eval(v) <= 100:
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                                     bad_parm=v,
                                     bad_val=eval(v),
                                     accepts='must be numeric and between 0 and 100'
@@ -1373,7 +1376,7 @@ class NetemCorrupt(object):
         for v in ['percent', 'correlation', ]:
             if eval(v) and not isinstance(eval(v), (int, long, float)) or \
                not 0 <= eval(v) <= 100:
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                                     bad_parm=v,
                                     bad_val=eval(v),
                                     accepts='must be numeric and between 0 and 100'
@@ -1412,7 +1415,7 @@ class NetemLimit(object):
         """
         if limit and not isinstance(limit, (int, long)) or \
             limit < 0:
-            raise netem_exceptions.NetemConfigException(
+            raise simple_netem_exceptions.NetemConfigException(
                                         bad_parm='limit',
                                         bad_val=limit,
                                         accepts='must be a positive integer'
@@ -1509,41 +1512,41 @@ class NetemDelay(object):
             NetemConfigException if passed invalid parameters
         """
         if not delay:
-            raise netem_exceptions.NetemConfigException(
+            raise simple_netem_exceptions.NetemConfigException(
                                                 bad_parm='delay',
                                                 bad_val=delay
                                                 )
 
         for v in ['delay', 'jitter', 'correlation', ]:
             if eval(v) and not isinstance(eval(v), (int, long, float)):
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                                     bad_parm=v,
                                     bad_val=eval(v),
                                     accepts='must be numeric'
                                     )
             if eval(v) < 0:
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                                     bad_parm=v,
                                     bad_val=eval(v),
                                     accepts='must be positive'
                                     )
 
             if 'correlation' in v and eval(v) > 100:
-                raise netem_exceptions.NetemConfigException(
+                raise simple_netem_exceptions.NetemConfigException(
                                 bad_parm=v,
                                 bad_val=eval(v),
                                 accepts='must be less than or equal to 100'
                                 )
 
         if delay_units and delay_units not in self.valid_delay_units:
-            raise netem_exceptions.NetemConfigException(
+            raise simple_netem_exceptions.NetemConfigException(
                                                 bad_parm='delay_units',
                                                 bad_val=delay_units,
                                                 accepts=self.valid_delay_units
                                                 )
 
         if distribution and distribution not in self.valid_distros:
-            raise netem_exceptions.NetemConfigException(
+            raise simple_netem_exceptions.NetemConfigException(
                                                 bad_parm='distribution',
                                                 bad_val=distribution,
                                                 accepts=self.valid_distros
