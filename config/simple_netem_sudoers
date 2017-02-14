@@ -1,0 +1,26 @@
+## Allow specific users to run the operating system commands needed by the
+## simple_netem module
+
+## Place this file under /etc/sudoers.d/ and make sure it is properly secure by
+## setting its permissions to 0600 use the command below
+## sudo chmod 600 /etc/sudoers.d/simple_netem_sudoers
+## Note that the visudo #includedir directive will not load files that contain
+## a . in their names
+## See https://www.sudo.ws/man/1.8.15/sudoers.man.html for more details about
+## the /etc/sudoers file
+
+## only allow this on the local host
+Host_Alias      LOCAL = 127.0.0.1
+
+## commands needed by the simple_netem module
+Cmnd_Alias      NETEM = /usr/sbin/tc, /usr/sbin/ip
+
+## users belonging to the wheel group are allowed to sudo the commands under
+## the NETEM alias on the hosts designated by the LOCAL alias without being
+## prompted for a password
+%wheel          LOCAL=NOPASSWD: NETEM
+
+## there are reports that on Ubuntu one cannot use the group designation so
+## we specify the users
+# User_Alias     NETEMUSERS = serban
+# NETEMUSERS          LOCAL=NOPASSWD: NETEM
