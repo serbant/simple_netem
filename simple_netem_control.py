@@ -302,17 +302,16 @@ class NetemInterface(object):
         self.iface_stats = ''
         self.last_error = ''
 
-        if not side:
-            raise simple_netem_exceptions.NetemSideException()
         self.side = side
+        #TODO: the validation here needs to make sure that there are no
+        # duplicates across instances. add this check under __new__()
 
-        if not ctrl_fqdn:
-            raise simple_netem_exceptions.NetemCtrlFqdnException()
         self.ctrl_fqdn = ctrl_fqdn
 
-        if not ctrl_port:
-            raise simple_netem_exceptions.NetemCtrlPortException()
         self.ctrl_port = ctrl_port
+        #TODO: this should be checked to see if it casts to a valid port:
+        # must be an int, must be gt 1024 (privileged ports), must be less than
+        # 65535
 
         self.iface = self.__iface__(side, iface)
         if logger is None:
@@ -374,6 +373,8 @@ interfaces'''
     def __iface__(self, side, iface):
         """
         guess the iface member based on the side member
+        
+        #TODO: this needs to go away. it is so out of date it hurts
         """
         if not iface:
             if 'host' in side:
