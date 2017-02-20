@@ -71,6 +71,7 @@ import warnings
 import subprocess
 import shlex
 import logging
+import collections
 
 from weakref import WeakSet
 
@@ -95,6 +96,8 @@ netem_stat = 'tc -s qdisc show dev'
 iface_ctrl = 'sudo ip link set dev'
 iface_stat = 'ip link show dev'
 iface_list = 'ip link show'
+
+    
 
 def get_logger():
     """
@@ -215,9 +218,6 @@ class NetemInterface(object):
         interface names are valid (on fedora and related distros the interfaces
         are named using a p2p1 convention)
 
-    *   **sudo_pwd:** the sudo password required to execute any active **ip**
-        or **tc** commands. defaults to **auto%%lab**
-
     *   **ctrl_fqdn:** the network address on which the PyroApp is listening
 
     *   **ctrl_port:** the network port on which the PyroApp is listening
@@ -241,8 +241,11 @@ class NetemInterface(object):
             application is running but it cannot be used to emulate the link
 
     """
-    def __init__(self, side, ctrl_fqdn=None, ctrl_port=None, iface=None,
-                 logger=None):
+    _defaults = collections.namedtuple('_defaults', ['IP', 'PORT', 'SIDE'])
+    DEFAULTS = _defaults(IP='127.0.0.1',PORT='44666',SIDE='client')
+        
+    def __init__(self, side=DEFAULTS.SIDE, ctrl_fqdn=DEFAULTS.IP, 
+                 ctrl_port=DEFAULTS.PORT, iface=None, logger=None):
         """
         :param side:
             the position of the interface controlled by this instance relative
@@ -311,7 +314,6 @@ class NetemInterface(object):
             raise simple_netem_exceptions.NetemCtrlPortException()
         self.ctrl_port = ctrl_port
 
-        self.sudo_pwd = sudo_pwd
         self.iface = self.__iface__(side, iface)
         if logger is None:
             self.logger = get_logger()
@@ -468,7 +470,7 @@ interfaces'''
             return (1, self.last_error)
 
         self.logger.debug('''executing {}'''.format(cmd))
-        ret, out, error = do_this(cmd, self.sudo_pwd)
+        ret, out, error = do_this(cmd)
 
         if ret:
             self.logger.error('''command {} returned error {}'''.format(cmd,
