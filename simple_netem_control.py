@@ -113,6 +113,9 @@ def get_logger():
 def get_etherfaces(xclude_wlan=True, xclude_loopback=True):
     """
     get a list of network interface names from the system
+    
+    see `<https://github.com/systemd/systemd/blob/master/src/udev/udev-builtin-net_id.c#L20>`_
+    for predicatble interface names
 
     :param xclude_wlan:
         exclude the wireless interfaces, default True
@@ -131,12 +134,13 @@ def get_etherfaces(xclude_wlan=True, xclude_loopback=True):
 
     if returncode:
         if 'supported' in error:
-            raise simple_netem_exceptions.NetemNotSupportedException(output, error)
+            raise simple_netem_exceptions.NetemNotSupportedException(
+                output, error)
         else:
             raise simple_netem_exceptions.NetemGeneralException(output, error)
 
     for etherface in output.split('\n'):
-        if xclude_wlan and 'wlan' in etherface:
+        if xclude_wlan and 'wl' in etherface:
             continue
         if xclude_loopback and 'lo' in etherface:
             continue
@@ -146,7 +150,10 @@ def get_etherfaces(xclude_wlan=True, xclude_loopback=True):
         etherfaces[''.join(etherface.split(': ')[1:2])] = ''.join(
                                                     etherface.split(': ')[2:3]
                                                     )
-
+        
+    # there may be a '' key, pop it
+    etherfaces.pop('', None)
+    
     return etherfaces
 
 
