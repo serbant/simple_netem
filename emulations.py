@@ -31,8 +31,8 @@ functions on linux hosts
 
 The linux commands exposed by this module are the **tc** command and the **ip**
 command.
-See 
-`<http://www.linuxfoundation.org/collaborate/workgroups/networking/netem#Emulating_wide_area_network_delays>`_
+See
+http://www.linuxfoundation.org/collaborate/workgroups/networking/netem#Emulating_wide_area_network_delays
 for details
 
 Supported WAN Emulations
@@ -64,39 +64,60 @@ per flow emulations.
 from __future__ import (
     unicode_literals, print_function, division, absolute_import)
 
-import six
 import warnings
 
+import six
+
 import simple_netem_exceptions
+
 
 __version__ = '0.0.1'
 
 
 class EmulationArgTypeError(TypeError):
+    '''
+    custom exception class to be raised when an emulation is being fed an
+    invalid argument
+    '''
 
     def __init__(self, emulation, arg, message):
-        self.message = 'type error in (): {} {}'.format(
+        '''
+        :arg string emulation:
+            the value of the :class:`<Emulation>` emulation member
+
+        :arg arg: the value of the argument that fails the validation
+
+        :arg string message: the exception message
+
+        '''
+        self.message = 'type error in {}: {} {}'.format(
             arg, emulation, message)
         super(EmulationArgTypeError, self).__init__(message)
+
+
+# pylint: disable=R0903
 
 
 class _Emulation(object):
     emulation = None
 
-    def is_valid(self, is_percent=False, *args):
+    def is_valid(self, is_lt_100=False, *args):
         '''
         are the arguments valid percentage values?
 
-        a valid percentage must be a positive number between 0.00 and 100.00
-        (exclusive).
-        granting that 0.00% and anything greater than or equal to 100.00% are
-        mathematically valid, it does not make sense to accept 0 or 100 and
-        greater as valid for our purposes:
+        a valid argument must be a positive number greater than 0.00. by
+        convention 0.00 is positive but for our purposes it is not useful;
+        a value of 0 for an emulation parameter will translate into
+        "apply this for 0 (0%) of packets)
 
-        *    0 will mean that the emulation does not apply to any packets
+        also in some cases a valid argument cannot be
+        greater than or equal to 100.00. a value of 100 for an emulation
+        parameter expressed in % translates to "apply this to all packets".
+        the only type of emulation where a parameter 0r 100% makes sense is
+        packet corruption although a network that corrupts 100% of packets is
+        not usable because even the retransmissions (the only way to correct
+        corruption) will be corrupt
 
-        *    100 and greater will mean that all packets (or more than all
-             which does not make sense)) are subject to the emulation
         '''
         for arg in args:
             if arg is None:
@@ -110,11 +131,11 @@ class _Emulation(object):
             elif arg <= 0:
                 raise EmulationArgTypeError(
                     emulation=self.emulation, arg=arg,
-                    message='must be a positive real number')
-            elif is_percent and arg > 100:
+                    message='must be a positive number')
+            elif is_lt_100 and arg > 100:
                 raise EmulationArgTypeError(
                     emulation=self.emulation, arg=arg,
-                    message='must be a positive real number between 0 and 100'
+                    message='must be a positive number smaller than 100'
                     ' (a percent)')
             else:
                 continue
@@ -144,15 +165,15 @@ class LossRandom(_Emulation):
 
     def __init__(self, percent=1, correlation=None):
         """
-        :param percent:
-            precentage of packets to lose, default=1 (%), must be integer
+        :param int percent: packets to loose expressed in %, default 1
+
         :param correlation:
             chances (approximate) that a packet lost will cause the next packet
-            in the sequence to be lost
+            in the sequence to be lost as well
 
             it doesn't require % format but it is a percentage style value
 
-        :raises: 
+        :raises:
 
             :exception:`<EmulationArgTypeError>` if passed invalid parameters
 
@@ -170,7 +191,7 @@ class LossRandom(_Emulation):
             self.emulation = '{} {}'.format(self.emulation, str(correlation))
 
 
-class NetemLossState(object):
+class LossState(_Emulation):
     """
     class wrapper for netem packet loss using a 4-state Markov model
 
@@ -197,10 +218,10 @@ class NetemLossState(object):
     model details
     --------------
 
-    the 4-state markvoh model has (duh) 4 possible states:
+    the 4-state Markov model has (duh) 4 possible states:
 
-    *    'good reception' is a 0% loss state that can transition to 'burst loss'
-         or to 'single loss'
+    *    'good reception' is a 0% loss state that can transition to
+         'burst loss' or to 'single loss'
 
     *    'burst loss" is a 100% loss state that can transition to either 'good
          reception' or 'good burst reception'. specific and important is that
@@ -210,8 +231,8 @@ class NetemLossState(object):
          'burst loss' and back
 
     *    'independent loss' is a 100% loss state that can only have 1 event
-         (1 lost packet). this state can only transition to the 'good reception'
-         state
+         (1 lost packet). this state can only transition to the
+         'good reception' state
 
     defaults
     ---------
@@ -228,30 +249,19 @@ class NetemLossState(object):
 
     *    p41: 1%; chance of isolated packet drops while in 'good'
 
-    notes:
-    -------
-
-    see the discussion about updating iproute2 to correct the problems listed
-    below.
-
-    as of 3.13.0-35-generic #62-Ubuntu SMP, this netem discipline is
-    reported as a netem loss gemodel discipline.
-    when all 5 p parms are fed into netem, there will be an exception related to
-    an l parm.
-    the tc -s command will report netem loss state as netem loss gemodel,
-    however when using the same values for the first 4 parms, the stats are
-    different between loss state and loss gemodel.
-
     as a general rule of thumb:
+    ---------------------------
 
     *    p13 is mandatory, signifies the probability of the system
          transitioning from the 'good reception' state to a 'burst loss' state
          (all the packets are lost), and puts the system in this configuration
          if used alone::
 
-            autolab@netem-z97proto:~$ sudo tc qdisc add dev eth1 root netem loss state 10
+            autolab@netem-z97proto:~$ sudo tc qdisc add dev eth1 root netem \
+            loss state 10
             autolab@netem-z97proto:~$ tc -s qdisc show dev eth1
-            qdisc netem 801c: root refcnt 2 limit 1000 loss state p13 10% p31 90% p32 0% p23 100% p14 0%
+            qdisc netem 801c: root refcnt 2 limit 1000 loss state \
+            p13 10% p31 90% p32 0% p23 100% p14 0%
              Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
              backlog 0b 0p requeues 0
             autolab@netem-z97proto:~$
@@ -283,51 +293,43 @@ class NetemLossState(object):
          is followed by a received packet (a transmission)
 
     """
+    # pylint:disable=R0913
 
     def __init__(self, p_13=10, p_31=70, p_23=10, p_32=10, p_14=1):
         """
-        :param p13:
+        :param p_13:
             is mandatory, numeric between 0 and 100, default 10
 
-        :param p31:
+        :param p_31:
             numeruc between 0 and 100, default 70
 
-        :param p23:
+        :param p_23:
             numeruc between 0 and 100, default 10
 
-        :param p32:
+        :param p_32:
              numeruc between 0 and 100, default 10
 
-        :param p14:
+        :param p_14:
             numeruc between 0 and 100, default 1
 
         :raises:
             NetemConfigException
         """
+        self.emulation = 'loss state'
         if not p_13:
-            # cannot be 0
-            raise simple_netem_exceptions.NetemConfigException(
-                bad_parm='p_13',
-                bad_val=p_13,
-                accepts='is mandatory'
-            )
+            # this one is mandatory
+            raise EmulationArgTypeError(
+                emulation=self.emulation, arg='None',
+                message='p_13 is a mandatory argument')
 
-        for v in ['p_13', 'p_31', 'p_23', 'p_32', 'p_14', ]:
-            if eval(v) and not \
-               isinstance(eval(v), (int, long, float)) or \
-               not 0 <= eval(v) <= 100:
-                raise simple_netem_exceptions.NetemConfigException(
-                    bad_parm=v,
-                    bad_val=eval(v),
-                    accepts='must be numeric and between 0 and 100'
-                )
+        self.is_valid(True, p_13, p_31, p_23, p_32, p_14)
 
-        p_31 = ' {}%'.format(str(p_31)) or None
-        p_23 = ' {}%'.format(str(p_23)) or None
-        p_32 = ' {}%'.format(str(p_32)) or None
-        p_14 = ' {}%'.format(str(p_14)) or None
-        self.loss_state = 'loss state {}%{}{}{}{}'.format(str(p_13), p_31,
-                                                          p_23, p_32, p_14)
+        emulations = ['{}%'.format(emulation) for emulation in
+                      [p_13, p_31, p_23, p_32, p_14] if emulation]
+
+        self.emulation = '{} {}'.format(self.emulation, ' '.join(emulations))
+
+    # pylint:enable+R0913
 
 
 class NetemLossGemodel(object):
