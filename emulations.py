@@ -64,6 +64,7 @@ per flow emulations.
 from __future__ import (
     unicode_literals, print_function, division, absolute_import)
 
+import re
 import warnings
 
 import six
@@ -72,6 +73,25 @@ import simple_netem_exceptions
 
 
 __version__ = '0.0.1'
+
+SCANF_MEASUREMENT = re.compile(
+    r'''(                      # group match like scanf() token %e, %E, %f, %g
+    [-+]?                      # +/- or nothing for positive
+    (\d+(\.\d*)?|\.\d+)        # match numbers: 1, 1., 1.1, .1
+    ([eE][-+]?\d+)?            # scientific notation: e(+/-)2 (*10^2)
+    )
+    (\s*)                      # separator: white space or nothing
+    (                          # unit of measure: like GB
+    \S*)''',    re.VERBOSE)
+'''
+:var SCANF_MEASUREMENT:
+    regular expression object that will match a measurement
+
+    **measurement** is the value of a quantity of something. most complicated
+    example::
+
+        -666.6e-100 units
+'''
 
 
 class EmulationArgTypeError(TypeError):
@@ -100,6 +120,94 @@ class EmulationArgTypeError(TypeError):
 
 class _Emulation(object):
     emulation = None
+
+    def validate_and_add(self, *args, **kwargs):
+        '''
+        are the arguments valid percentage values?
+
+        a valid argument must be a positive number greater than 0.00. by
+        convention 0.00 is positive but for our purposes it is not useful;
+        a value of 0 for an emulation parameter will translate into
+        "apply this for 0 (0%) of packets)
+
+        also in some cases a valid argument cannot be
+        greater than or equal to 100.00. a value of 100 for an emulation
+        parameter expressed in % translates to "apply this to all packets".
+        the only type of emulation where a parameter 0r 100% makes sense is
+        packet corruption although a network that corrupts 100% of packets is
+        not usable because even the retransmissions (the only way to correct
+        corruption) will be corrupt
+
+        '''
+        lt_100 = kwargs.get('lt_100', True)
+        positive = kwargs.get('positive', True)
+        units = kwargs.pop('units', '%')
+        if not isinstance(units, (list, tuple)):
+            units = [units]
+        can_be_bare = kwargs.get('can_be_bare', True)
+
+        def get_arg_value(arg_match, arg):
+            '''
+            get the numeric part of the argument
+            '''
+            try:
+                arg_value = float(arg_match.groups()[0])
+            except ValueError:
+                raise EmulationArgTypeError(
+                    emulation=self.emulation, arg=arg,
+                    message='must start with a number')
+
+            if positive and arg_value <= 0:
+                raise EmulationArgTypeError(
+                    emulation=self.emulation, arg=arg,
+                    message='must start with a positive number')
+
+            if lt_100 and arg_value > 100:
+                raise EmulationArgTypeError(
+                    emulation=self.emulation, arg=arg,
+                    message='must start with a number smaller than 100')
+
+            return str(arg_value)
+
+        def get_arg_units(arg_match, arg):
+            '''
+            get the units part of the argument
+            '''
+            arg_units = arg_match.groups()[5].lower()
+
+            if can_be_bare and not arg_units:
+                # no units is acceptable, just go away
+                return ''
+
+            if arg_units not in units:
+                raise EmulationArgTypeError(
+                    emulation=self.emulation, arg=arg,
+                    message='invalid measurement unit. must be one of %s' %
+                    ', '.join(units))
+
+            return arg_units
+
+        for arg in args:
+            if arg is None:
+                # nothing we can do here
+                continue
+
+            if not isinstance(arg, six.text_type):
+                # not a string? cast it to a string
+                # use six.text_type to force py2*3 compatibility
+                arg = str(arg)
+
+            # generate the re.macth object here so that we do it just once per
+            # loop iteration. we could do it within the get_arg_foo() functions
+            # but then we would do it twice per each iteration
+            arg_match = re.match(SCANF_MEASUREMENT, arg)
+            if not arg_match:
+                # hard to believe but maybe
+                continue
+
+            self.emulation = '{} {}{}'.format(self.emulation,
+                                              get_arg_value(arg_match, arg),
+                                              get_arg_units(arg_match, arg))
 
     def is_valid(self, is_lt_100=False, *args):
         '''
@@ -313,7 +421,7 @@ class LossState(_Emulation):
             numeruc between 0 and 100, default 1
 
         :raises:
-            NetemConfigException
+            :exception:`<EmulationArgTypeError>` if passed invalid parameters
         """
         self.emulation = 'loss state'
         if not p_13:
@@ -325,14 +433,14 @@ class LossState(_Emulation):
         self.is_valid(True, p_13, p_31, p_23, p_32, p_14)
 
         emulations = ['{}%'.format(emulation) for emulation in
-                      [p_13, p_31, p_23, p_32, p_14] if emulation]
+                      [p_13, p_31, p_23, p_32, p_14, ] if emulation]
 
         self.emulation = '{} {}'.format(self.emulation, ' '.join(emulations))
 
     # pylint:enable+R0913
 
 
-class NetemLossGemodel(object):
+class LossGemodel(_Emulation):
     """
     class wrapper for netem packet loss using a Gilbert-Elliot loss model
 
@@ -407,7 +515,6 @@ class NetemLossGemodel(object):
          1-h=$desired_lost_packets_percent_bad_state,
          1-k=$desired_lost_packets_percent_good_state
     """
-    # pylint:disable=C0103
 
     def __init__(self, p=10, r=90, one_h=50, one_k=1):
         """
@@ -423,34 +530,24 @@ class NetemLossGemodel(object):
         :param one_k:
             probability of a packet being lost when in good state
         :raises:
-            NetemConfigException if passed invalid parameters
+            :exception:`<EmulationArgTypeError>` if passed invalid parameters
         """
+        self.emulation = 'loss gemodel'
         if not p:
-            raise simple_netem_exceptions.NetemConfigException(
-                bad_parm='p',
-                bad_val=p,
-                accepts='is mandatory'
-            )
+            # this one is mandatory
+            raise EmulationArgTypeError(
+                emulation=self.emulation, arg='None',
+                message='p is a mandatory argument')
 
-        for v in ['p', 'r', 'one_h', 'one_k', ]:
-            if eval(v) and not \
-               isinstance(eval(v), (int, long, float)) or \
-               not 0 <= eval(v) <= 100:
-                raise simple_netem_exceptions.NetemConfigException(
-                    bad_parm=v,
-                    bad_val=eval(v),
-                    accepts='must be numeric and between 0 and 100'
-                )
+        self.is_valid(True, p, r, one_h, one_k)
 
-        one_k = ' {}%'.format(str(one_k)) or None
-        one_h = ' {}%'.format(str(one_h)) or None
-        r = ' {}%'.format(str(r)) or None
-        self.loss_gemodel = 'loss gemodel {}%{}{}{}'.format(str(p), r,
-                                                            one_h, one_k)
-    # pylint:enable=C0103
+        emulations = ['{}%'.format(emulation) for emulation in
+                      [p, r, one_h, one_k, ] if emulation]
+
+        self.emulation = '{} {}'.format(self.emulation, ' '.join(emulations))
 
 
-class NetemRate(object):
+class Rate(_Emulation):
     """
     class wrapper for netem packet rate control
 
@@ -466,8 +563,8 @@ class NetemRate(object):
         Optional PACKETOVERHEAD (in bytes) specify an per packet overhead and
         can be negative. A positive value can be used to simulate additional
         link layer headers. A negative value  can  be  used  to artificial
-        strip the Ethernet header (e.g. -14) and/or simulate a link layer header
-        compression scheme.
+        strip the Ethernet header (e.g. -14) and/or simulate a link layer
+        header compression scheme.
         The third parameter - an unsigned value - specify the cellsize.
         Cellsize can be  used  to  simulate  link layer  schemes.
         ATM  for  example  has  an payload cellsize of 48 bytes and 5 byte per
@@ -492,6 +589,7 @@ class NetemRate(object):
     this class does not provide access to the optional parameters
 
     """
+
     valid_units = ['bit', 'bps', 'kbit', 'kbps', 'mbit', 'mbps', 'gbit',
                    'gbps', ]
 
@@ -502,6 +600,8 @@ class NetemRate(object):
         :raises:
             NetemConfigException if passed invalid parameters
         """
+        self.emulation = 'rate'
+
         if not isinstance(rate, (int, long, float)):
             raise simple_netem_exceptions.NetemConfigException(
                 bad_parm='rate',
