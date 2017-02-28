@@ -2,10 +2,10 @@
 ## simple_netem module
 
 ## Place this file under /etc/sudoers.d/ and make sure it is properly secure by
-## setting its permissions to 0600 use the command below
-## sudo chmod 600 /etc/sudoers.d/simple_netem_sudoers
+## setting its permissions to 0440 use the command below
+## sudo chmod 440 /etc/sudoers.d/simple_netem_sudoers
 ## Note that the visudo #includedir directive will not load files that contain
-## a . in their names
+## a . in their names so do not put any . in the name of this file
 ## See https://www.sudo.ws/man/1.8.15/sudoers.man.html for more details about
 ## the /etc/sudoers file
 
@@ -18,6 +18,7 @@ Cmnd_Alias      NETEM = /usr/sbin/tc, /usr/sbin/ip
 
 ## there are reports that on Ubuntu one cannot use the group designation so
 ## we specify the users
-## uncomment the lines below if that is the case
+## update the value for NETEMUSERS according to your environment and
+## uncomment the two lines below if that is the case
 # User_Alias     NETEMUSERS = serban
 # NETEMUSERS          ALL=NOPASSWD: NETEM
