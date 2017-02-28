@@ -69,8 +69,6 @@ import warnings
 
 import six
 
-import simple_netem_exceptions
-
 
 __version__ = '0.0.1'
 
@@ -82,10 +80,10 @@ SCANF_MEASUREMENT = re.compile(
     )
     (\s*)                      # separator: white space or nothing
     (                          # unit of measure: like GB
-    \S*)''',    re.VERBOSE)
+    \S*)''', re.VERBOSE)
 '''
 :var SCANF_MEASUREMENT:
-    regular expression object that will match a measurement
+    regular expression pattern (compiled) that will match a measurement
 
     **measurement** is the value of a quantity of something. most complicated
     example::
@@ -123,35 +121,85 @@ class _Emulation(object):
 
     def validate_and_add(self, *args, **kwargs):
         '''
-        are the arguments valid percentage values?
+        add each arg in *args to the emulation property but only if arg is
+        valid
 
-        a valid argument must be a positive number greater than 0.00. by
-        convention 0.00 is positive but for our purposes it is not useful;
-        a value of 0 for an emulation parameter will translate into
-        "apply this for 0 (0%) of packets)
+        each arg must be a string formatted as 'number[[sep]unit_of_measure]'
+        where the number part can be in any numeric format that is accepted
+        by the ``float()`` function, sep can be any combination of characters
+        that evaluates to white space, and the unit_of_measure is a ``str``.
 
-        also in some cases a valid argument cannot be
-        greater than or equal to 100.00. a value of 100 for an emulation
-        parameter expressed in % translates to "apply this to all packets".
-        the only type of emulation where a parameter 0r 100% makes sense is
-        packet corruption although a network that corrupts 100% of packets is
-        not usable because even the retransmissions (the only way to correct
-        corruption) will be corrupt
+        this method will validate each arg in *args,
+        remove the white space(s), and append it to the :member:`<emulation>`
+        using a space as separator
 
+        :raises:
+            :exception:`<EmulationArgTypeError>` if any arg fails validation
+
+        :param args:
+            the emulation arguments to be validated and added to the emulation
+
+        :param bool lt_100:
+            (as part of **kwargs) must all these args be less than 100?
+            default ``True`` because most of these args are either
+            percentage of packets or chance that the emulation will kick in
+
+            if this argument is not specified when invoking this method,
+            any arg with a value greater then 100.00 will raise an exception
+
+        :param bool positive:
+            (as part of kwargs) must all these args be positive?
+            default ``True``
+
+        :param bool integer:
+            (as part of kwargs) force the numeric part of each arg to ``int``?
+            default ``False``
+
+        :param default_unit:
+            (as part of kwargs) the measurement unit that should be used
+            for these args if not present as part of the arg itself.
+            default is the '' (empty) ``str``; this is necessary because a
+            ``None`` will actually evaluate to the `None` ``str`` when fed
+            into ``format()``.
+
+        :param units:
+            (as part of kwargs) the measurement units that are to be
+            considered acceptable for these args. default is the '' (empty)
+            ``str``; this is necessary because a ``None`` will actually
+            evaluate to the `None` ``str`` when fed into ``format()``.
+            this parameter will also accept a ``list`` or ``tuple``
+
+        :param bool can_be_bare:
+            (as part of kwargs) are args with no measurement units acceptable?
+            default is ``True``
         '''
+        # handle the known kwargs key: value pairs
         lt_100 = kwargs.get('lt_100', True)
         positive = kwargs.get('positive', True)
-        units = kwargs.pop('units', '%')
+        integer = kwargs.get('integer', False)
+        default_unit = kwargs.get('default_unit', '')
+        units = kwargs.pop('units', '')
         if not isinstance(units, (list, tuple)):
             units = [units]
         can_be_bare = kwargs.get('can_be_bare', True)
+        # done with the default kwargs entries
 
         def get_arg_value(arg_match, arg):
             '''
             get the numeric part of the argument
+
+            :arg arg_match: a re.match object
+
+            :arg str arg: the string that was used to generate arg_match
+
+            :returns: the numeric part of the arg
+
+            :raises: :exception:`<EmulationArgTypeError>`
             '''
             try:
                 arg_value = float(arg_match.groups()[0])
+                if integer:
+                    arg_value = int(arg_value)  # pylint:disable=R0204
             except ValueError:
                 raise EmulationArgTypeError(
                     emulation=self.emulation, arg=arg,
@@ -172,12 +220,23 @@ class _Emulation(object):
         def get_arg_units(arg_match, arg):
             '''
             get the units part of the argument
+
+            :arg arg_match: a re.match object
+
+            :arg str arg: the string that was used to generate arg_match
+
+            :returns: the numeric part of the arg
+
+            :raises: :exception:`<EmulationArgTypeError>`
             '''
             arg_units = arg_match.groups()[5].lower()
 
-            if can_be_bare and not arg_units:
-                # no units is acceptable, just go away
-                return ''
+            if not arg_units:
+                if can_be_bare:
+                    # no units is acceptable, just go away
+                    return ''
+                else:
+                    arg_units = default_unit
 
             if arg_units not in units:
                 raise EmulationArgTypeError(
@@ -198,55 +257,16 @@ class _Emulation(object):
                 arg = str(arg)
 
             # generate the re.macth object here so that we do it just once per
-            # loop iteration. we could do it within the get_arg_foo() functions
-            # but then we would do it twice per each iteration
+            # loop. we could do it within the get_arg_foo() functions
+            # but then we would do it twice per loop
             arg_match = re.match(SCANF_MEASUREMENT, arg)
             if not arg_match:
                 # hard to believe but maybe
                 continue
 
-            self.emulation = '{} {}{}'.format(self.emulation,
-                                              get_arg_value(arg_match, arg),
-                                              get_arg_units(arg_match, arg))
-
-    def is_valid(self, is_lt_100=False, *args):
-        '''
-        are the arguments valid percentage values?
-
-        a valid argument must be a positive number greater than 0.00. by
-        convention 0.00 is positive but for our purposes it is not useful;
-        a value of 0 for an emulation parameter will translate into
-        "apply this for 0 (0%) of packets)
-
-        also in some cases a valid argument cannot be
-        greater than or equal to 100.00. a value of 100 for an emulation
-        parameter expressed in % translates to "apply this to all packets".
-        the only type of emulation where a parameter 0r 100% makes sense is
-        packet corruption although a network that corrupts 100% of packets is
-        not usable because even the retransmissions (the only way to correct
-        corruption) will be corrupt
-
-        '''
-        for arg in args:
-            if arg is None:
-                # nothing we can do here
-                continue
-
-            if not isinstance(arg, (six.integer_types, float)):
-                raise EmulationArgTypeError(
-                    emulation=self.emulation, arg=arg,
-                    message='must be numeric')
-            elif arg <= 0:
-                raise EmulationArgTypeError(
-                    emulation=self.emulation, arg=arg,
-                    message='must be a positive number')
-            elif is_lt_100 and arg > 100:
-                raise EmulationArgTypeError(
-                    emulation=self.emulation, arg=arg,
-                    message='must be a positive number smaller than 100'
-                    ' (a percent)')
-            else:
-                continue
+            self.emulation = '{} {}{}'.format(
+                self.emulation,
+                get_arg_value(arg_match, arg), get_arg_units(arg_match, arg))
 
 
 class LossRandom(_Emulation):
@@ -288,15 +308,11 @@ class LossRandom(_Emulation):
             :warnings:`<DeprecationWarning>` if correlation is present
         """
         self.emulation = 'loss random'
-
-        self.is_valid(True, percent, correlation)
-
-        self.emulation = '{} {}%'.format(self.emulation, str(percent))
-
         if correlation:
             warnings.warn('using correlation for random loss is deprecated',
                           DeprecationWarning)
-            self.emulation = '{} {}'.format(self.emulation, str(correlation))
+
+        self.validate_and_add(percent, correlation)
 
 
 class LossState(_Emulation):
@@ -430,14 +446,9 @@ class LossState(_Emulation):
                 emulation=self.emulation, arg='None',
                 message='p_13 is a mandatory argument')
 
-        self.is_valid(True, p_13, p_31, p_23, p_32, p_14)
+        self.validate_and_add(p_13, p_31, p_23, p_32, p_14)
 
-        emulations = ['{}%'.format(emulation) for emulation in
-                      [p_13, p_31, p_23, p_32, p_14, ] if emulation]
-
-        self.emulation = '{} {}'.format(self.emulation, ' '.join(emulations))
-
-    # pylint:enable+R0913
+    # pylint:enable=R0913
 
 
 class LossGemodel(_Emulation):
@@ -539,12 +550,7 @@ class LossGemodel(_Emulation):
                 emulation=self.emulation, arg='None',
                 message='p is a mandatory argument')
 
-        self.is_valid(True, p, r, one_h, one_k)
-
-        emulations = ['{}%'.format(emulation) for emulation in
-                      [p, r, one_h, one_k, ] if emulation]
-
-        self.emulation = '{} {}'.format(self.emulation, ' '.join(emulations))
+        self.validate_and_add(p, r, one_h, one_k)
 
 
 class Rate(_Emulation):
@@ -589,44 +595,24 @@ class Rate(_Emulation):
     this class does not provide access to the optional parameters
 
     """
+    _unit = 'mbit'
+    _units = ['bit', 'bps', 'kbit', 'kbps', 'mbit', 'mbps', 'gbit', 'gbps', ]
 
-    valid_units = ['bit', 'bps', 'kbit', 'kbps', 'mbit', 'mbps', 'gbit',
-                   'gbps', ]
-
-    def __init__(self, rate=1, units='mbit'):
+    def __init__(self, rate='1mbit'):
         """
         :param rate:
         :param units:
         :raises:
-            NetemConfigException if passed invalid parameters
+            :exception:`<EmulationArgTypeError>` if passed invalid parameters
         """
         self.emulation = 'rate'
 
-        if not isinstance(rate, (int, long, float)):
-            raise simple_netem_exceptions.NetemConfigException(
-                bad_parm='rate',
-                bad_val=rate,
-                accepts='must be numeric'
-            )
-
-        if rate <= 0:
-            raise simple_netem_exceptions.NetemConfigException(
-                bad_parm='rate',
-                bad_val=rate,
-                accepts='must be greater than 0'
-            )
-
-        if units not in self.valid_units:
-            raise simple_netem_exceptions.NetemConfigException(
-                bad_parm='units',
-                bad_val=units,
-                accepts=self.valid_units
-            )
-
-        self.rate = 'rate {}{}'.format(str(rate), units)
+        self.validate_and_add(
+            rate,
+            default_unit=self._unit, units=self._units, can_be_bare=False)
 
 
-class NetemReorder(object):
+class Reorder(_Emulation):
     """
     class wrapper for netem packet reordering
 
@@ -637,19 +623,24 @@ class NetemReorder(object):
 
     reorder::
 
-       to use reordering, a delay option must be specified. There are two ways  to  use  this  option  (assuming
-       'delay 10ms' in the options list).
+       to use reordering, a delay option must be specified.
+       There are two ways  to  use  this  option  (assuming 'delay 10ms' in
+       the options list).
 
        reorder 25% 50% gap 5
-       in  this first example, the first 4 (gap - 1) packets are delayed by 10ms and subsequent packets are sent
-       immediately with a probability of 0.25 (with correlation of 50% ) or delayed with a probability of  0.75.
-       After  a  packet  is  reordered,  the process restarts i.e. the next 4 packets are delayed and subsequent
-       packets are sent immediately or delayed based on reordering probability. To cause  a  repeatable  pattern
-       where every 5th packet is reordered reliably, a reorder probability of 100% can be used.
+       in  this first example, the first 4 (gap - 1) packets are delayed by
+       10ms and subsequent packets are sent immediately with a probability
+       of 0.25 (with correlation of 50% ) or delayed with a probability
+       of  0.75.
+       After  a  packet  is  reordered,  the process restarts i.e. the next
+       4 packets are delayed and subsequent packets are sent immediately or
+       delayed based on reordering probability.
+       To cause  a  repeatable  pattern where every 5th packet is reordered
+       reliably, a reorder probability of 100% can be used.
 
        reorder 25% 50%
-       in this second example 25% of packets are sent immediately (with correlation of 50%) while the others are
-       delayed by 10 ms.
+       in this second example 25% of packets are sent immediately
+       (with correlation of 50%) while the others are delayed by 10 ms.
 
 
     """
@@ -667,37 +658,23 @@ class NetemReorder(object):
             optional, default None
             (the entire sequence is subject to reordering), must be an integer
         :raises:
-            NetemConfigException if passed invalid parameters
+            :exception:`<EmulationArgTypeError>` if passed invalid parameters
         """
+        self.emulation = 'reorder'
         if not percent:
-            raise simple_netem_exceptions.NetemConfigException(
-                bad_parm='reorder percent',
-                bad_val=percent,
-                accepted='must be specified'
-            )
+            # this one is mandatory
+            raise EmulationArgTypeError(
+                emulation=self.emulation, arg='None',
+                message='percent is a mandatory argument')
 
-        for v in ['percent', 'correlation', ]:
-            if eval(v) and not isinstance(eval(v), (int, long, float)) or \
-               not 0 <= eval(v) <= 100:
-                raise simple_netem_exceptions.NetemConfigException(
-                    bad_parm=v,
-                    bad_val=eval(v),
-                    accepts='must be numeric and between 0 and 100'
-                )
+        self.validate_and_add(percent, correlation)
 
-        if gap and not isinstance(gap, (int, long)) or gap < 0:
-            raise simple_netem_exceptions.NetemConfigException(
-                bad_parm='gap',
-                bad_val=gap,
-                accepts='must be a positive integer'
-            )
-
-        gap = ' gap {}'.format(str(gap)) or None
-        correlation = ' {}%'.format(str(correlation)) or None
-        self.reorder = 'reorder {}%{}{}'.format(str(percent), correlation, gap)
+        if gap:
+            self.emulation = '{} gap'.format(self.emulation)
+            self.validate_and_add(gap)
 
 
-class NetemDuplicate(object):
+class Duplicate(_Emulation):
     """
     class wrapper for netem packet duplication
 
@@ -716,7 +693,7 @@ class NetemDuplicate(object):
     correlation
     """
 
-    def __init__(self, percent=1, correlation=0):
+    def __init__(self, percent=1, correlation=None):
         """
         :param percent:
             duplicate percent of packets, must be an integer, optional,
@@ -724,45 +701,57 @@ class NetemDuplicate(object):
         :param correlation:
             duplication correlation, must be an integer, optional, default 10
         :raises:
-            NetemConfigException if passed invalid parameters
+            :exception:`<EmulationArgTypeError>` if passed invalid parameters
         """
-        for v in ['percent', 'correlation', ]:
-            if eval(v) and not isinstance(eval(v), (int, long, float)) or \
-               not 0 <= eval(v) <= 100:
-                raise simple_netem_exceptions.NetemConfigException(
-                    bad_parm=v,
-                    bad_val=eval(v),
-                    accepts='must be numeric and between 0 and 100'
-                )
+        self.emulation = 'duplicate'
 
-        correlation = ' {}%'.format(str(correlation)) or None
-        self.duplicate = 'duplicate {}%{}'.format(str(percent), correlation)
+        if not percent:
+            # this one is mandatory
+            raise EmulationArgTypeError(
+                emulation=self.emulation, arg='None',
+                message='percent is a mandatory argument')
+
+        self.validate_and_add(percent, correlation)
 
 
-class NetemCorrupt(object):
+class Corrupt(_Emulation):
     """
     class wrapper for netem corrupt params
 
+    CORRUPT := corrupt PERCENT [ CORRELATION ]]
 
+    corrupt
+       allows the emulation of random noise introducing an error in  a  random
+       position  for a chosen percent of packets. It is also possible to add a
+       correlation through the proper parameter.
 
     """
 
-    def __init__(self, percent=0.1, correlation=0):
-        for v in ['percent', 'correlation', ]:
-            if eval(v) and not isinstance(eval(v), (int, long, float)) or \
-               not 0 <= eval(v) <= 100:
-                raise simple_netem_exceptions.NetemConfigException(
-                    bad_parm=v,
-                    bad_val=eval(v),
-                    accepts='must be numeric and between 0 and 100'
-                )
+    def __init__(self, percent=0.1, correlation=None):
+        '''
+        :param percent:
+            percent of corrupt packets in a transmission; default 0.1
 
-        correlation = ' {}%'.format(str(correlation)) or None
+        :param correlation:
+            chance that a corrupt packet will be followed by another corrupt
+            packet
+
+        :raises:
+            :exception:`<EmulationArgTypeError>` if passed invalid parameters
+        '''
+        self.emulation = 'corrupt'
+        if not percent:
+            # this one is mandatory
+            raise EmulationArgTypeError(
+                emulation=self.emulation, arg='None',
+                message='percent is a mandatory argument')
+
+        self.validate_and_add(percent, correlation)
 
         self.corrupt = 'corrupt {}% {}'.format(str(percent), correlation)
 
 
-class NetemLimit(object):
+class Limit(_Emulation):
     """
     class wrapper for netem limit packets param
 
@@ -781,27 +770,24 @@ class NetemLimit(object):
 
     """
 
-    def __init__(self, limit=None):
+    def __init__(self, limit='1e6'):
         """
         :param limit:
-            must be an integer, default None
+            must be an integer, default 1 million packets
         :raises:
-            NetemConfigException if passed invalid parameters
+            :exception:`<EmulationArgTypeError>` if passed invalid parameters
         """
-        if limit and not isinstance(limit, (int, long)) or \
-                limit < 0:
-            raise simple_netem_exceptions.NetemConfigException(
-                bad_parm='limit',
-                bad_val=limit,
-                accepts='must be a positive integer'
-            )
-        if limit:
-            self.limit = 'limit {}'.format(str(limit))
-        else:
-            self.limit = ''
+        self.emulation = 'limit'
+        if not limit:
+            # this one is mandatory
+            raise EmulationArgTypeError(
+                emulation=self.emulation, arg='None',
+                message='limit is a mandatory argument')
+
+        self.validate_and_add(limit, lt_100=False, integer=True)
 
 
-class NetemDelay(object):
+class Delay(_Emulation):
     """
     class wrapper for netem delay parameters
 
@@ -857,82 +843,55 @@ class NetemDelay(object):
         jitter and correlation are dependent on the hardware and the
         network congestion and therefore very unpredictable
     """
-    valid_delay_units = ['s', 'sec', 'secs', 'ms', 'msec', 'msecs', 'us',
-                         'usec', 'usecs', ]
-    valid_distros = ['uniform', 'normal', 'pareto', 'paretonormal', ]
+    _unit = 'ms'
+    _units = ['s', 'sec', 'secs', 'ms', 'msec', 'msecs', 'us',
+              'usec', 'usecs', ]
+    _distributions = ['uniform', 'normal', 'pareto', 'paretonormal', ]
 
     def __init__(self, delay=100, jitter=10,
-                 delay_units='', correlation=25, distribution='normal'):
+                 correlation=25, distribution='normal'):
         """
         :param delay:
-            must be numeric and positive, optional, default 100
+            must be numeric and positive, optional, default 100ms
             delay to apply to packets, measured in time units
         :param jitter:
-            must be numeric and positive, optional, default 10
+            must be numeric and positive, optional, default 10ms
             jitter, the equivalent of specifying +/- for delay,
             measured in time units
-        :param delay_units:
-            optional string, any of valid_delay_units, default None
-            time units, if None (bare number), use microseconds (usec)
         :param correlation:
             the apprcximate statistical dependency between packet delay
             variation expressed in %, default 25, between 0 and 100
         :param distribution:
             uniform|normal|pareto|paretonormal, default normal
             the delay variation follows a pre-defined statistical distribution
-            curve. the first 3 distribution tables are defined in the kernel. it
-            is possible to specify custom distribution curves if they are
+            curve. the first 3 distribution tables are defined in the kernel.
+            it is possible to specify custom distribution curves if they are
             configured in the kernel
         :raises:
-            NetemConfigException if passed invalid parameters
+            :exception:`<EmulationArgTypeError>` if passed invalid parameters
         """
+        self.emulation = 'delay'
+
         if not delay:
-            raise simple_netem_exceptions.NetemConfigException(
-                bad_parm='delay',
-                bad_val=delay
-            )
+            # this one is mandatory
+            raise EmulationArgTypeError(
+                emulation=self.emulation, arg='None',
+                message='delay is a mandatory argument')
 
-        for v in ['delay', 'jitter', 'correlation', ]:
-            if eval(v) and not isinstance(eval(v), (int, long, float)):
-                raise simple_netem_exceptions.NetemConfigException(
-                    bad_parm=v,
-                    bad_val=eval(v),
-                    accepts='must be numeric'
-                )
-            if eval(v) < 0:
-                raise simple_netem_exceptions.NetemConfigException(
-                    bad_parm=v,
-                    bad_val=eval(v),
-                    accepts='must be positive'
-                )
+        self.validate_and_add(
+            delay, jitter,
+            lt_100=False, default_unit=self._units, units=self._units)
 
-            if 'correlation' in v and eval(v) > 100:
-                raise simple_netem_exceptions.NetemConfigException(
-                    bad_parm=v,
-                    bad_val=eval(v),
-                    accepts='must be less than or equal to 100'
-                )
+        if correlation:
+            self.validate_and_add(correlation)
 
-        if delay_units and delay_units not in self.valid_delay_units:
-            raise simple_netem_exceptions.NetemConfigException(
-                bad_parm='delay_units',
-                bad_val=delay_units,
-                accepts=self.valid_delay_units
-            )
+        if distribution:
+            if distribution not in self._distributions:
+                raise EmulationArgTypeError(
+                    emulation=self.emulation, arg='None',
+                    message='distribution must be one of %s'
+                    % ', '.join(self._distributions))
 
-        if distribution and distribution not in self.valid_distros:
-            raise simple_netem_exceptions.NetemConfigException(
-                bad_parm='distribution',
-                bad_val=distribution,
-                accepts=self.valid_distros
-            )
-
-        jitter = '{}{}'.format(str(jitter), delay_units) or None
-        correlation = '{}%'.format(str(correlation)) or None
-        distribution = 'distribution {}'.format(distribution) or None
-        delay = 'delay {}{}'.format(str(delay), delay_units)
-
-        self.delay = ' '.join([delay, jitter, correlation, distribution])
-
+            self.emulation = '{} {}'.format(self.emulation, distribution)
 
 # pylint:enable=R0903
