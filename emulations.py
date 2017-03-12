@@ -108,8 +108,8 @@ class EmulationArgTypeError(TypeError):
         :arg string message: the exception message
 
         '''
-        self.message = 'emulation argument format error in {}:'
-        ' expecting {} {}'.format(
+        self.message = 'emulation argument format error in'
+        ' {}: expecting {} {}'.format(
             arg, emulation, message)
         super(EmulationArgTypeError, self).__init__(message)
 
