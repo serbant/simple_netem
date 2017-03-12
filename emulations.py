@@ -108,7 +108,8 @@ class EmulationArgTypeError(TypeError):
         :arg string message: the exception message
 
         '''
-        self.message = 'type error in {}: {} {}'.format(
+        self.message = 'emulation argument format error in {}:'
+        ' expecting {} {}'.format(
             arg, emulation, message)
         super(EmulationArgTypeError, self).__init__(message)
 
@@ -116,7 +117,10 @@ class EmulationArgTypeError(TypeError):
 # pylint: disable=R0903
 
 
-class _Emulation(object):
+class Emulation(object):
+    '''
+    base class for netem emulations
+    '''
     emulation = None
 
     def validate_and_add(self, *args, **kwargs):
@@ -262,14 +266,18 @@ class _Emulation(object):
             arg_match = re.match(SCANF_MEASUREMENT, arg)
             if not arg_match:
                 # hard to believe but maybe
-                continue
+                raise EmulationArgTypeError(
+                    emulation=self.emulation, arg=arg,
+                    message='a measurement'
+                    ' (a numeric value followed by an optional separator'
+                    ' and an optional measurement unit)')
 
             self.emulation = '{} {}{}'.format(
                 self.emulation,
                 get_arg_value(arg_match, arg), get_arg_units(arg_match, arg))
 
 
-class LossRandom(_Emulation):
+class LossRandom(Emulation):
     """
     class wrapper for netem packet loss in random mode
 
@@ -315,7 +323,7 @@ class LossRandom(_Emulation):
         self.validate_and_add(percent, correlation)
 
 
-class LossState(_Emulation):
+class LossState(Emulation):
     """
     class wrapper for netem packet loss using a 4-state Markov model
 
@@ -451,7 +459,7 @@ class LossState(_Emulation):
     # pylint:enable=R0913
 
 
-class LossGemodel(_Emulation):
+class LossGemodel(Emulation):
     """
     class wrapper for netem packet loss using a Gilbert-Elliot loss model
 
@@ -553,7 +561,7 @@ class LossGemodel(_Emulation):
         self.validate_and_add(p, r, one_h, one_k)
 
 
-class Rate(_Emulation):
+class Rate(Emulation):
     """
     class wrapper for netem packet rate control
 
@@ -612,7 +620,7 @@ class Rate(_Emulation):
             default_unit=self._unit, units=self._units, can_be_bare=False)
 
 
-class Reorder(_Emulation):
+class Reorder(Emulation):
     """
     class wrapper for netem packet reordering
 
@@ -674,7 +682,7 @@ class Reorder(_Emulation):
             self.validate_and_add(gap)
 
 
-class Duplicate(_Emulation):
+class Duplicate(Emulation):
     """
     class wrapper for netem packet duplication
 
@@ -714,7 +722,7 @@ class Duplicate(_Emulation):
         self.validate_and_add(percent, correlation)
 
 
-class Corrupt(_Emulation):
+class Corrupt(Emulation):
     """
     class wrapper for netem corrupt params
 
@@ -751,7 +759,7 @@ class Corrupt(_Emulation):
         self.corrupt = 'corrupt {}% {}'.format(str(percent), correlation)
 
 
-class Limit(_Emulation):
+class Limit(Emulation):
     """
     class wrapper for netem limit packets param
 
@@ -787,7 +795,7 @@ class Limit(_Emulation):
         self.validate_and_add(limit, lt_100=False, integer=True)
 
 
-class Delay(_Emulation):
+class Delay(Emulation):
     """
     class wrapper for netem delay parameters
 
