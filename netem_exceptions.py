@@ -25,51 +25,56 @@
 from __future__ import unicode_literals
 
 
-class NetemBaseException(Exception):
+class NetemBaseError(Exception):
     """
-    NetemBaseException
+    NetemBaseError
     """
+
     def __init__(self, message, **kwargs):
         self.message = message
         self.__dict__.update(kwargs)
-        super(NetemBaseException, self).__init__(message)
+        super(NetemBaseError, self).__init__(message)
 
 
-class NetemSideException(NetemBaseException):
+class NetemSideException(NetemBaseError):
     """
     NetemSideException raised when a NetemInterface instance is initialized
     without a side argument
     """
+
     def __init__(self, **dummy_kwargs):
         message = 'the side argument is mandatory'
         super(NetemSideException, self).__init__(message)
 
 
-class NetemCtrlFqdnException(NetemBaseException):
+class NetemCtrlFqdnException(NetemBaseError):
     """
     NetemCtrlFqdnException raised when trying to initialize a NetemInterface
     object without specifying the fqdn where the app is running
     """
+
     def __init__(self, **dummy_kwargs):
         message = '''the ctrl_fqdn parameter is mandatory'''
         super(NetemCtrlFqdnException, self).__init__(message)
 
 
-class NetemCtrlPortException(NetemBaseException):
+class NetemCtrlPortException(NetemBaseError):
     """
     NetemCtrlPortException raised when trying to initialize a NetemInterface
     object without specifying the port where the app is running
     """
+
     def __init__(self, **dummy_kwargs):
         message = '''the ctrl_port parameter is mandatory'''
         super(NetemCtrlPortException, self).__init__(message)
 
 
-class NetemNotSupportedException(NetemBaseException):
+class NetemNotSupportedError(NetemBaseError):
     """
-    NetemNotSupportedException raised when trying to initialize NetemCtrl
+    NetemNotSupportedError raised when trying to initialize NetemCtrl
     classes on platforms other than Linux
     """
+
     def __init__(self, out, err, **dummy_kwargs):
         """
         :param out:
@@ -80,14 +85,15 @@ class NetemNotSupportedException(NetemBaseException):
         self.out = 'unsupported command: {}'.format(out)
         self.err = 'error: {}'.format(err)
         message = '{}. {}'.format(self.out, self.err)
-        super(NetemNotSupportedException, self).__init__(message)
+        super(NetemNotSupportedError, self).__init__(message)
 
-# pylint:disable=R0923
-class NetemInvalidInterface(NetemBaseException):
+
+class NetemInvalidInterface(NetemBaseError):
     """
     NetemInvalidInterface raised when trying to initialize a NetemInterface
     instance on an ethernet name that does not exist on the host
     """
+
     def __init__(self, bad_iface, all_ifaces, **dummy_kwargs):
         """
         :param bad_iface:
@@ -99,41 +105,43 @@ class NetemInvalidInterface(NetemBaseException):
         self.bad_iface = bad_iface
         self.all_ifaces = ', '.join(all_ifaces)
         message = '''invalid ethernet name {}. must use one of {}'''.format(
-                                                                self.bad_iface,
-                                                                self.all_ifaces
-                                                                )
+            self.bad_iface,
+            self.all_ifaces
+        )
         super(NetemInvalidInterface, self).__init__(message)
 
-# pylint:enable=R0923
 
-class NetemInsufficientInterfaces(NetemBaseException):
+class NetemInsufficientInterfaces(NetemBaseError):
     """
     NetemInsufficientInterfaces raised when there aren't enough interfaces on
     the host; need at least 2 and need a free interface for each NetemInterface
     instance
     """
+
     def __init__(self, **dummy_kwargs):
         message = \
-'''netem node does not have enough interfaces, need at least 2 ethernet
+            '''netem node does not have enough interfaces, need at least 2 ethernet
 interfaces'''
         super(NetemInsufficientInterfaces, self).__init__(message)
 
 
-class NetemGeneralException(NetemBaseException):
+class NetemUnexpectedError(NetemBaseError):
     """
     shit happens netem exception
     """
+
     def __init__(self, err, **dummy_kwargs):
-        message = '''unexpected error {}'''.format(err)
-        super(NetemGeneralException, self).__init__(message)
+        message = 'unexpected error {}'.format(err)
+        super(NetemUnexpectedError, self).__init__(message)
         self.err = err
 
 
-class NetemConfigException(NetemBaseException):
+class NetemConfigException(NetemBaseError):
     """
     NetemDelayException raised when invalid parameters are fed into the
     'tc qdisc add dev $iface root netem' command
     """
+
     def __init__(self, bad_parm=None, bad_val=None, accepts='', **dummy_kwargs):
         """
         :param bad_parm:
@@ -152,10 +160,7 @@ class NetemConfigException(NetemBaseException):
             self.accepts = ', {}'.format(accepts)
 
         message = '''invalid parameter {}={}{}'''.format(self.bad_parm,
-                                                                  self.bad_val,
-                                                                  self.accepts)
+                                                         self.bad_val,
+                                                         self.accepts)
 
         super(NetemConfigException, self).__init__(message)
-
-
-
