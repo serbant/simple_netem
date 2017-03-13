@@ -94,6 +94,87 @@ iface_stat = 'ip link show dev'
 iface_list = 'ip link show'
 
 
+class Command(object):
+    '''
+    expose all the os command strings as members of a class
+
+    :cvar str add_emulation: add emulation command
+
+        will interpolate the device and the emulation into the command
+
+        :usage:
+
+        >>> Command.add_emulation % dict(device='eth0',emulation='delay 10')
+        'sudo tc qdisc add dev eth0 root netem delay 10'
+        >>>
+
+
+    '''
+
+    @staticmethod
+    def add_emulation(device=None, emulation=None):
+        '''
+        :returns: the os command to add an emulation to a network device
+        :rtype: str
+
+        :arg str device: the network device name
+
+        :arg str emulation: the netem emulation(s)
+        '''
+        cmd = 'sudo tc qdisc add dev'
+        if not device or not emulation:
+            raise netem_exceptions.CommandError('device', 'emulation')
+        return r'{cmd} {device} root netem {emulation}'.format(
+            cmd=cmd, device=device, emulation=emulation)
+
+    @staticmethod
+    def remove_emulation(device, emulation):
+        '''
+        :returns: the os command to remove an emulation from a network device
+        :rtype: str
+
+        :arg str device: the network device name
+
+        :arg str emulation: the netem emulation(s)
+
+        '''
+        cmd = 'sudo tc qdisc del dev'
+        if not device or not emulation:
+            raise netem_exceptions.CommandError('device', 'emulation')
+        return r'{cmd} {device} root netem {emulation}'.format(
+            cmd=cmd, device=device, emulation=emulation)
+
+    @staticmethod
+    def remove_all_emulations(device):
+        '''
+        :returns: the command to remove all emulations from a network device
+        '''
+        cmd = r'sudo tc qdisc del dev'
+        if not device:
+            raise netem_exceptions.CommandError('device')
+        return r'{cmd} {device} root netem'.format(cmd=cmd, device=device)
+
+    @staticmethod
+    def show_emulations(device):
+        pass
+
+    @staticmethod
+    def ifup(device):
+        pass
+
+    @staticmethod
+    def ifdown(device):
+        pass
+
+    @staticmethod
+    def ifshow(device):
+        pass
+
+    @staticmethod
+    def iflist():
+        pass
+
+
 def get_logger():
     """
     get a logging objects
