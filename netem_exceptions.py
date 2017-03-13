@@ -25,6 +25,17 @@
 from __future__ import unicode_literals
 
 
+class CommandError(Exception):
+    '''
+    raised if there is an error in invoking a :class:`<Command>` command
+    '''
+
+    def __init__(self, *arg_names, **kwargs):
+        self.message = 'mandatory arguments: {}'.format(', '.join(arg_names))
+        self.__dict__.update(kwargs)
+        super(CommandError, self).__init__(self.message)
+
+
 class NetemBaseError(Exception):
     """
     NetemBaseError
