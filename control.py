@@ -31,7 +31,7 @@ functions on linux hosts
 
 The linux commands exposed by this module are the **tc** command and the **ip**
 command.
-See 
+See
 `<http://www.linuxfoundation.org/collaborate/workgroups/networking/netem#Emulating_wide_area_network_delays>`_
 for details
 
@@ -66,7 +66,6 @@ from __future__ import (
 
 
 import sys
-import os
 import warnings
 import subprocess
 import shlex
@@ -74,7 +73,7 @@ import logging
 
 from weakref import WeakSet
 
-import simple_netem_exceptions
+import netem_exceptions
 import emulations
 
 __version__ = '0.0.1'
@@ -107,54 +106,7 @@ def get_logger():
     return logger
 
 
-def get_etherfaces(xclude_wlan=True, xclude_loopback=True):
-    """
-    get a list of network interface names from the system
-
-    see `<https://github.com/systemd/systemd/blob/master/src/udev/udev-builtin-net_id.c#L20>`_
-    for predicatble interface names
-
-    :param xclude_wlan:
-        exclude the wireless interfaces, default True
-    :param xclude_loopback:
-        exclude the loopback (lo) interfaces (yes, there can be more than one),
-        default True
-    :returns:
-        a dictionary keyed on the etherface system name, each entry contains the
-        entry between the <> following the interface name
-    :raises:
-        NetemNotSupportedException
-        NetemInsufficientInterfaces
-    """
-    etherfaces = dict()
-    returncode, output, error = do_this(iface_list)
-
-    if returncode:
-        if 'supported' in error:
-            raise simple_netem_exceptions.NetemNotSupportedException(
-                output, error)
-        else:
-            raise simple_netem_exceptions.NetemGeneralException(output, error)
-
-    for etherface in output.split('\n'):
-        if xclude_wlan and 'wl' in etherface:
-            continue
-        if xclude_loopback and 'lo' in etherface:
-            continue
-        if not etherface:
-            continue
-
-        etherfaces[''.join(etherface.split(': ')[1:2])] = ''.join(
-            etherface.split(': ')[2:3]
-        )
-
-    # there may be a '' key, pop it
-    etherfaces.pop('', None)
-
-    return etherfaces
-
-
-def do_this(cmd):
+def execute(cmd):
     """
     execute a system command
 
@@ -163,29 +115,26 @@ def do_this(cmd):
     :returns:
         a tuple in the format (returncode, stdout, stderr)
     """
-    if not 'linux' in sys.platform:
+    if 'linux' not in sys.platform:
         return (1,
                 'cannot execute {}'.format(cmd),
                 'not supported on {}'.format(sys.platform))
 
-    do_it = shlex.split(cmd)
-
     try:
-        p = subprocess.Popen(do_it, bufsize=-1, stdout=subprocess.PIPE,
-                             stdin=subprocess.PIPE, stderr=subprocess.PIPE)
-        talk_back, choked = p.communicate()
+        proc = subprocess.Popen(
+            shlex.split(cmd), bufsize=-1, stdout=subprocess.PIPE,
+            stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+        talk_back, choked = proc.communicate()
     except OSError as err:
         return (1, 'cannot execute {}'.format(cmd), err)
     except ValueError as err:
         return (1, 'invalid command {}'.format(cmd), err)
-    except Exception as err:
+    except Exception as err:  # pylint:disable=W0703
         return (1, 'unexpected error on command {}'.format(cmd), err)
 
-    return (p.returncode, talk_back, choked)
+    return (proc.returncode, talk_back, choked)
 
 
-# pylint:disable=R0923
-# pylint:disable=R0902
 class NetemInterface(object):
     """
     class wrapper for the network interface to be controlled
@@ -195,42 +144,6 @@ class NetemInterface(object):
 
     public members
     ---------------
-
-    *   **side:** the relative orientation of the netem interface wrapped in the
-        instance. a combination of this and the fqdn associated with the
-        control interface of the netem node will uniquely identify each netem
-        server instance running.
-        it is possible to run more than 2 instances of the netem ctrl module if
-        the hardware supports it. the limit is the number of network ports
-        (**not the number of ip addresses**) available on the netem node. when
-        running more than 2 instances of the netem ctrl server, it is mandatory
-        to specify the interface associated with each instance (see **iface**
-        below)
-
-    *   **iface:** the system interface name where the instance is running. by
-        default (when this member is not specified in the instance constructor)
-        the code assumes that:
-
-        *   there are only 2 netem enabled interfaces on the node
-
-        *   the host facing instance is running on eth0
-
-        *   the client facing instance is running on eth1
-
-        the user is warned to **not rely** on this mechanism. there is no
-        guarantee that the number of interfaces is limited to 2, or that the
-        interface names are valid (on fedora and related distros the interfaces
-        are named using a p2p1 convention)
-
-    *   **sudo_pwd:** the sudo password required to execute any active **ip**
-        or **tc** commands. defaults to **auto%%lab**
-
-    *   **ctrl_fqdn:** the network address on which the PyroApp is listening
-
-    *   **ctrl_port:** the network port on which the PyroApp is listening
-
-    *   **logger:** the logging object; it is a member because this way it can
-        be named based on other class members
 
     *   **state:** the state of the application that will be returned via the
         heartbeat() : starting|emulating|waiting|blocking|degraded.
@@ -244,10 +157,57 @@ class NetemInterface(object):
 
         *   blocking: the interface is down but not out
 
-        *   degraded: the interface cannot be used. this is the error state. the
-            application is running but it cannot be used to emulate the link
+        *   degraded: the interface cannot be used. this is the error state.
+            the application is running but it cannot be used
 
     """
+    @staticmethod
+    def get_all_interfaces(xclude_wlan=True, xclude_loopback=True):
+        """
+        get a list of network interface names from the system
+
+        see `<https://github.com/systemd/systemd/blob/master/src/udev/udev-builtin-net_id.c#L20>`_
+        for predictable interface names
+
+        :param xclude_wlan:
+            exclude the wireless interfaces, default True
+        :param xclude_loopback:
+            exclude the loopback (lo) interfaces
+            (yes, there can be more than one), default True
+        :returns:
+            a dictionary keyed on the network interface system name,
+            each entry contains the info between the <> following the interface
+            name
+        :raises:
+            NetemNotSupportedException
+            NetemInsufficientInterfaces
+        """
+        interfaces = dict()
+        returncode, output, error = execute(iface_list)
+
+        if returncode:
+            if 'supported' in error:
+                raise netem_exceptions.NetemNotSupportedError(
+                    output, error)
+            else:
+                raise netem_exceptions.NetemUnexpectedError(error)
+
+        for etherface in output.split('\n'):
+            if xclude_wlan and 'wl' in etherface:
+                continue
+            if xclude_loopback and 'lo' in etherface:
+                continue
+            if not etherface:
+                continue
+
+            interfaces[''.join(etherface.split(': ')[1:2])] = ''.join(
+                etherface.split(': ')[2:3]
+            )
+
+        # there may be a '' key, pop it
+        interfaces.pop('', None)
+
+        return interfaces
 
     def __init__(self, side, ctrl_fqdn=None, ctrl_port=None, iface=None,
                  logger=None):
@@ -308,22 +268,22 @@ class NetemInterface(object):
         self.last_error = ''
 
         if not side:
-            raise simple_netem_exceptions.NetemSideException()
+            raise netem_exceptions.NetemSideException()
         self.side = side
 
         if not ctrl_fqdn:
-            raise simple_netem_exceptions.NetemCtrlFqdnException()
+            raise netem_exceptions.NetemCtrlFqdnException()
         self.ctrl_fqdn = ctrl_fqdn
 
         if not ctrl_port:
-            raise simple_netem_exceptions.NetemCtrlPortException()
+            raise netem_exceptions.NetemCtrlPortException()
         self.ctrl_port = ctrl_port
 
         self.iface = self.__iface__(side, iface)
         if logger is None:
             self.logger = get_logger()
 
-        all_ifaces = get_etherfaces()
+        all_ifaces = self.get_all_interfaces()
 
         # not a multi-homed host, can't run netem
         if len(all_ifaces) < 2:
@@ -332,7 +292,7 @@ class NetemInterface(object):
             self.last_error = \
                 '''netem node does not have enough interfaces, need at least 2 ethernet
 interfaces'''
-            raise simple_netem_exceptions.NetemInsufficientInterfaces()
+            raise netem_exceptions.NetemInsufficientInterfaces()
 
         # bad interface name, do we need to raise or not?
         if self.iface not in all_ifaces.keys():
@@ -341,7 +301,7 @@ interfaces'''
             self.last_error = '''invalid interface specification {}'''.format(
                 self.iface
             )
-            raise simple_netem_exceptions.NetemInvalidInterface(
+            raise netem_exceptions.NetemInvalidInterface(
                 self.iface,
                 all_ifaces.keys()
             )
@@ -454,9 +414,9 @@ interfaces'''
             the output or the error from said command
         """
         cmd = '{} {}'.format(iface_stat, self.iface)
-        return self.__call_do_this__(cmd)
+        return self.__call_execute__(cmd)
 
-    def __call_do_this__(self, cmd):
+    def __call_execute__(self, cmd):
         """
         execute the command prepared by the calling method, log what's happening,
         smooch the returns
@@ -475,7 +435,7 @@ interfaces'''
             return (1, self.last_error)
 
         self.logger.debug('''executing {}'''.format(cmd))
-        ret, out, error = do_this(cmd, self.sudo_pwd)
+        ret, out, error = execute(cmd)
 
         if ret:
             self.logger.error('''command {} returned error {}'''.format(cmd,
@@ -500,7 +460,7 @@ interfaces'''
             the output or the error from said command
         """
         cmd = '{} {}'.format(netem_stat, self.iface)
-        ret, out = self.__call_do_this__(cmd)
+        ret, out = self.__call_execute__(cmd)
         self.iface_stats = dict(iface_stat=self.get_iface_state(),
                                 netem_stat=out)
 
@@ -523,7 +483,7 @@ interfaces'''
         """
         if not self.is_iface_up():
             cmd = '{} {} up'.format(iface_ctrl, self.iface)
-            ret, out = self.__call_do_this__(cmd)
+            ret, out = self.__call_execute__(cmd)
         else:
             ret, out = (0, '')
 
@@ -542,7 +502,7 @@ interfaces'''
         """
         if self.is_iface_up():
             cmd = '{} {} down'.format(iface_ctrl, self.iface)
-            ret, out = self.__call_do_this__(cmd)
+            ret, out = self.__call_execute__(cmd)
         else:
             ret, out = (0, '')
 
@@ -690,11 +650,11 @@ interfaces'''
         self.logger.debug(cmd)
 
         if isinstance(delay, dict):
-            cmd = '{} {}'.format(cmd, emulations.NetemDelay(**delay).delay)
+            cmd = '{} {}'.format(cmd, emulations.Delay(**delay).emulation)
             self.logger.debug(cmd)
         else:
             if delay:
-                raise simple_netem_exceptions.NetemConfigException(
+                raise netem_exceptions.NetemConfigException(
                     bad_parm='delay',
                     bad_val=delay,
                     accepts='must be a dictionary'
@@ -702,16 +662,15 @@ interfaces'''
 
         if isinstance(reorder, dict):
             # reorder also needs delay
-            if not 'delay' in cmd:
-                cmd = '{} {}'.format(cmd, emulations.NetemDelay(
-                    delay=10, delay_units='msec'
-                ).delay)
+            if 'delay' not in cmd:
+                cmd = '{} {}'.format(cmd, emulations.Delay(
+                    delay=10).emulation)
             cmd = '{} {}'.format(
-                cmd, emulations.NetemReorder(**reorder).reorder)
+                cmd, emulations.Reorder(**reorder).emulation)
             self.logger.debug(cmd)
         else:
             if reorder:
-                raise simple_netem_exceptions.NetemConfigException(
+                raise netem_exceptions.NetemConfigException(
                     bad_parm='reorder',
                     bad_val=reorder,
                     accepts='must be a dictionary'
@@ -719,11 +678,11 @@ interfaces'''
 
         if isinstance(corrupt, dict):
             cmd = '{} {}'.format(
-                cmd, emulations.NetemCorrupt(**corrupt).corrupt)
+                cmd, emulations.Corrupt(**corrupt).emulation)
             self.logger.debug(cmd)
         else:
             if corrupt:
-                raise simple_netem_exceptions.NetemConfigException(
+                raise netem_exceptions.NetemConfigException(
                     bad_parm='corrupt',
                     bad_val=corrupt,
                     accepts='must be a dictionary'
@@ -731,22 +690,22 @@ interfaces'''
 
         if isinstance(duplicate, dict):
             cmd = '{} {}'.format(
-                cmd, emulations.NetemDuplicate(**duplicate).duplicate)
+                cmd, emulations.Duplicate(**duplicate).emulation)
             self.logger.debug(cmd)
         else:
             if duplicate:
-                raise simple_netem_exceptions.NetemConfigException(
+                raise netem_exceptions.NetemConfigException(
                     bad_parm='duplicate',
                     bad_val=duplicate,
                     accepts='must be a dictionary'
                 )
 
         if isinstance(rate, dict):
-            cmd = '{} {}'.format(cmd, emulations.NetemRate(**rate).rate)
+            cmd = '{} {}'.format(cmd, emulations.Rate(**rate).emulation)
             self.logger.debug(cmd)
         else:
             if rate:
-                raise simple_netem_exceptions.NetemConfigException(
+                raise netem_exceptions.NetemConfigException(
                     bad_parm='rate',
                     bad_val=rate,
                     accepts='must be a dictionary'
@@ -762,7 +721,7 @@ interfaces'''
             self.logger.debug(cmd)
         else:
             if loss_random:
-                raise simple_netem_exceptions.NetemConfigException(
+                raise netem_exceptions.NetemConfigException(
                     bad_parm='loss_random',
                     bad_val=loss_random,
                     accepts='must be a dictionary'
@@ -772,12 +731,12 @@ interfaces'''
         if isinstance(loss_gemodel, dict):
             loss_state = ''
             cmd = '{} {}'.format(
-                cmd, emulations.NetemLossGemodel(**loss_gemodel).loss_gemodel
+                cmd, emulations.LossGemodel(**loss_gemodel).emulation
             )
             self.logger.debug(cmd)
         else:
             if loss_gemodel:
-                raise simple_netem_exceptions.NetemConfigException(
+                raise netem_exceptions.NetemConfigException(
                     bad_parm='loss_gemodel',
                     bad_val=loss_gemodel,
                     accepts='must be a dictionary'
@@ -785,10 +744,10 @@ interfaces'''
 
         if isinstance(loss_state, dict):
             cmd = '{} {}'.format(
-                cmd, emulations.NetemLossState(**loss_state).loss_state)
+                cmd, emulations.LossState(**loss_state).emulation)
         else:
             if loss_state:
-                raise simple_netem_exceptions.NetemConfigException(
+                raise netem_exceptions.NetemConfigException(
                     bad_parm='loss_state',
                     bad_val=loss_state,
                     accepts='must be a dictionary'
@@ -797,43 +756,28 @@ interfaces'''
         if isinstance(limit, dict):
             # limit only makes sense if other emulations are applied
             if len(cmd) > len(cmd_root):
-                cmd = '{} {}'.format(cmd, emulations.NetemLimit(**limit).limit)
+                cmd = '{} {}'.format(cmd, emulations.Limit(**limit).emulation)
                 self.logger.debug(cmd)
             else:
-                warnings.warn(
-                    '''bare limit={} parameter for netem command {}, ignoring'''.format(
-                        limit,
-                        cmd
-                    )
-                )
-                self.logger.warn(
-                    '''bare limit={} parameter for netem command {}, ignoring'''.format(
-                        limit,
-                        cmd
-                    )
-                )
-                ret, out = 1, \
-                    '''bare limit={} parameter for netem command {}, ignoring'''.format(
-                        limit,
-                        cmd
-                    )
-                return ret, out
+                msg = 'bare limit=%s emulation, ignoring' % limit
+                warnings.warn(msg)
+                self.logger.warning(msg)
+                return 1, msg
         else:
             if limit:
-                raise simple_netem_exceptions.NetemConfigException(
+                raise netem_exceptions.NetemConfigException(
                     bad_parm='limit',
                     bad_val=limit,
                     accepts='must be a dictionary'
                 )
 
-        ret, out = self.__call_do_this__(cmd)
+        ret, out = self.__call_execute__(cmd)
         if not ret:
             self.state = 'emulating'
 
         self.iface_stats = dict(iface_stat=self.get_iface_state(),
                                 netem_stat=self.get_qdisc_netem())
         return ret, out
-    # pylint:enable=R0912
 
     def del_qdisc_netem(self):
         """
@@ -844,7 +788,7 @@ interfaces'''
         """
         if self.is_emulating():
             cmd = '{} {} root'.format(netem_del, self.iface)
-            ret, out = self.__call_do_this__(cmd)
+            ret, out = self.__call_execute__(cmd)
         else:
             ret, out = (0, '')
 
