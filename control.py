@@ -96,18 +96,7 @@ iface_list = 'ip link show'
 
 class Command(object):
     '''
-    expose all the os command strings as members of a class
-
-    :cvar str add_emulation: add emulation command
-
-        will interpolate the device and the emulation into the command
-
-        :usage:
-
-        >>> Command.add_emulation % dict(device='eth0',emulation='delay 10')
-        'sudo tc qdisc add dev eth0 root netem delay 10'
-        >>>
-
+    build and expose all the os command strings as static methods
 
     '''
 
