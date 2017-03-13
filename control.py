@@ -132,7 +132,7 @@ def execute(cmd):
     except Exception as err:  # pylint:disable=W0703
         return (1, 'unexpected error on command {}'.format(cmd), err)
 
-    return (proc.returncode, talk_back, choked)
+    return (proc.returncode, talk_back.decode(), choked.decode())
 
 
 class NetemInterface(object):
