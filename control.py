@@ -317,16 +317,16 @@ class NetemInterface(object):
 
         return interfaces
 
-    def __init__(self, side, ctrl_fqdn=None, ctrl_port=None, iface=None,
-                 logger=None):
+    def __init__(self, side, iface=None, logger=None):
         """
         :param side:
             the position of the interface controlled by this instance relative
             to the network
 
-            the value of this parameter is arbritary but from logical
+            the value of this parameter is arbritrary but from logical
             perspective it maps to either a 'host side' or (one or more)
             'client sides'
+
         :param iface:
             the system name associated with the interface controlled from this
             instance by the operating system
@@ -350,18 +350,6 @@ class NetemInterface(object):
                  the host side instance, and the string 'client' for the client
                  side instance
 
-        :param ctrl_fqdn:
-            the address component of the Pyro4 uri
-
-            this paramater is mandatory and used strictly for logging
-            purposes
-
-        :param ctrl_port:
-            the port component of the Pyro4 uri
-
-            this paramater is mandatory and used strictly for logging
-            purposes
-
         :raises:
             NetemInsufficientInterfaces exception,
             NetemInvalidInterfaceException exception
@@ -379,14 +367,6 @@ class NetemInterface(object):
             raise netem_exceptions.NetemSideException()
         self.side = side
 
-        if not ctrl_fqdn:
-            raise netem_exceptions.NetemCtrlFqdnException()
-        self.ctrl_fqdn = ctrl_fqdn
-
-        if not ctrl_port:
-            raise netem_exceptions.NetemCtrlPortException()
-        self.ctrl_port = ctrl_port
-
         self.iface = self.__iface__(side, iface)
         if logger is None:
             self.logger = get_logger()
@@ -394,13 +374,10 @@ class NetemInterface(object):
         all_ifaces = self.get_all_interfaces()
 
         # not a multi-homed host, can't run netem
-        if len(all_ifaces) < 2:
+        if len(all_ifaces.keys()) < 2:
             self.state = 'error'
-            self.iface_stats = all_ifaces
-            self.last_error = \
-                '''netem node does not have enough interfaces, need at least 2 ethernet
-interfaces'''
-            raise netem_exceptions.NetemInsufficientInterfaces()
+            raise netem_exceptions.NetemInsufficientInterfaces(
+                interfaces=dict(all_ifaces))
 
         # bad interface name, do we need to raise or not?
         if self.iface not in all_ifaces.keys():

@@ -129,10 +129,9 @@ class NetemInsufficientInterfaces(NetemBaseError):
     instance
     """
 
-    def __init__(self, **dummy_kwargs):
-        message = \
-            '''netem node does not have enough interfaces, need at least 2 ethernet
-interfaces'''
+    def __init__(self, interfaces, **dummy_kwargs):
+        message = 'a netem node needs at least 2 network devices.'
+        ' network interfaces on this host: \n{}'.format(interfaces)
         super(NetemInsufficientInterfaces, self).__init__(message)
 
 
