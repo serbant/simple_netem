@@ -137,6 +137,8 @@ class Command(object):
     def remove_all_emulations(device):
         '''
         :returns: the command to remove all emulations from a network device
+
+        :arg str device:
         '''
         cmd = r'sudo tc qdisc del dev'
         if not device:
@@ -145,23 +147,59 @@ class Command(object):
 
     @staticmethod
     def show_emulations(device):
-        pass
+        '''
+        :returns: the os command to show the emulations runing on a device
+
+        :arg str device:
+        '''
+        cmd = 'tc -s qdisc show dev'
+        if not device:
+            raise netem_exceptions.CommandError('device')
+        return r'{cmd} {device}'.format(cmd=cmd, device=device)
 
     @staticmethod
     def ifup(device):
-        pass
+        '''
+        set a network device in the UP state
+
+        :arg str device:
+        '''
+        cmd = 'sudo ip link set dev'
+        if not device:
+            raise netem_exceptions.CommandError('device')
+        return r'{cmd} {device} up'.format(cmd=cmd, device=device)
 
     @staticmethod
     def ifdown(device):
-        pass
+        '''
+        set a network device in the DOWN state
+
+        :arg str device:
+        '''
+        cmd = 'sudo ip link set dev'
+        if not device:
+            raise netem_exceptions.CommandError('device')
+        return r'{cmd} {device} down'.format(cmd=cmd, device=device)
 
     @staticmethod
     def ifshow(device):
-        pass
+        '''
+        show the info for a network device
+
+        :arg str device:
+        '''
+        cmd = 'ip link show dev'
+        if not device:
+            raise netem_exceptions.CommandError('device')
+        return r'{cmd} {device}'.format(cmd=cmd, device=device)
 
     @staticmethod
     def iflist():
-        pass
+        '''
+        list the network devices on the host
+        '''
+        cmd = 'ip link show'
+        return r'{cmd}'.format(cmd=cmd)
 
 
 def get_logger():
