@@ -80,9 +80,9 @@ __version__ = '0.0.1'
 
 DEBUG = 1
 if DEBUG:
-    loglevel = logging.DEBUG
+    LOG_LEVEL = logging.DEBUG
 else:
-    loglevel = logging.WARN
+    LOG_LEVEL = logging.WARN
 
 
 # ip and tc command prefixes
@@ -209,7 +209,7 @@ def get_logger():
     logger = logging.getLogger(__name__)
     console = logging.StreamHandler()
     console.setFormatter('%(asctime)s %(name)s %(levelname)-6s: %(message)s')
-    console.setLevel(loglevel)
+    console.setLevel(LOG_LEVEL)
     logger.addHandler(console)
     return logger
 
@@ -269,8 +269,18 @@ class NetemInterface(object):
             the application is running but it cannot be used
 
     """
+    class State(object):
+        # pylint:disable=R0903
+        '''
+        keep the possible states in their own class
+        '''
+
+        ready = dict(ready='UP, no emulation')
+        emulating = dict(emulating='UP, running an emulation')
+        blocking = dict(blocking='DOWN, blocking all traffic')
+
     @staticmethod
-    def get_all_interfaces(xclude_wlan=True, xclude_loopback=True):
+    def get_interfaces(xclude_wlan=True, xclude_loopback=True):
         """
         get a list of network interface names from the system
 
@@ -291,7 +301,7 @@ class NetemInterface(object):
             NetemInsufficientInterfaces
         """
         interfaces = dict()
-        returncode, output, error = execute(iface_list)
+        returncode, output, error = execute(Command.iflist())
 
         if returncode:
             if 'supported' in error:
@@ -317,7 +327,7 @@ class NetemInterface(object):
 
         return interfaces
 
-    def __init__(self, side, iface=None, logger=None):
+    def __init__(self,  interface=None, side=None, logger=None):
         """
         :param side:
             the position of the interface controlled by this instance relative
@@ -327,7 +337,7 @@ class NetemInterface(object):
             perspective it maps to either a 'host side' or (one or more)
             'client sides'
 
-        :param iface:
+        :param interface:
             the system name associated with the interface controlled from this
             instance by the operating system
 
@@ -336,7 +346,7 @@ class NetemInterface(object):
             convention (current fedora or centos distros do not use this
             convention anymore).
 
-            if iface is not specified, the constructor will assume that:
+            if interface is not specified, the constructor will assume that:
 
             *    the **netem node** has only 2 netem capable interfaces
 
@@ -359,79 +369,45 @@ class NetemInterface(object):
             number of available interfaces or if each available interface is
             already controlled by an instance of this class
         """
-        self.state = 'starting'
-        self.iface_stats = ''
-        self.last_error = ''
+        if not interface:
+            raise netem_exceptions.NetemUnexpectedError(
+                err='must specify a network device')
 
-        if not side:
-            raise netem_exceptions.NetemSideException()
-        self.side = side
+        self.interface = interface
 
-        self.iface = self.__iface__(side, iface)
-        if logger is None:
-            self.logger = get_logger()
+        self.logger = logger or get_logger()
 
-        all_ifaces = self.get_all_interfaces()
+        interfaces = self.get_interfaces()
 
         # not a multi-homed host, can't run netem
-        if len(all_ifaces.keys()) < 2:
-            self.state = 'error'
+        if len(interfaces.keys()) < 2:
             raise netem_exceptions.NetemInsufficientInterfaces(
-                interfaces=dict(all_ifaces))
+                interfaces=dict(interfaces))
 
-        # bad interface name, do we need to raise or not?
-        if self.iface not in all_ifaces.keys():
-            self.state = 'error'
-            self.iface_stats = all_ifaces
-            self.last_error = '''invalid interface specification {}'''.format(
-                self.iface
-            )
+        # bad interface name
+        if self.interface not in interfaces.keys():
             raise netem_exceptions.NetemInvalidInterface(
-                self.iface,
-                all_ifaces.keys()
-            )
+                self.interface, interfaces.keys())
 
         # we're out of interfaces, bail on this one but don't throw an error
-        if len(NetemInterface.instances) > len(all_ifaces.keys()):
-            self.state = 'degraded'
-            self.iface_stats = all_ifaces
-            self.last_error = '''cannot use interface {}, it's already
-                                 busy'''.format(self.iface)
-            self.logger.error(self.last_error)
-            warnings.warn('''cannot use interface {}, it's already
-                                 busy'''.format(self.iface))
-            return
+        # TODO: change the condition here; it work like this because we assume
+        # the user is not doing anything stupid. the correct condition would be
+        # to look in NetemInterface.instances and bail if there is on that
+        # already uses the interface
+        if len(NetemInterface.instances) > len(interfaces.keys()):
+            raise netem_exceptions.NetemInterfaceBusyError(self.interface)
+
+        self.side = side or self.interface
 
         # and we're good to go
         # but let's make sure there's no qdisc already running on this thing
         self.del_qdisc_netem()
         self.iface_up()
 
-        self.state = 'waiting'
-        self.iface_stats = dict(iface_stat=self.get_iface_state(),
-                                netem_stat=self.get_qdisc_netem())
+        self.state = self.State.ready
+
         self.logger.info('''netem control server running on interface {},
-                            at {}:{}'''.format(self.iface,
-                                               self.ctrl_fqdn,
-                                               self.ctrl_port))
-        self.logger.debug('''interface state: {}'''.format(
-            self.iface_stats['iface_stat']
-        ))
-        self.logger.debug('''netem state: {}'''.format(
-            self.iface_stats['netem_stat']
-        ))
-
-    def __iface__(self, side, iface):
-        """
-        guess the iface member based on the side member
-        """
-        if not iface:
-            if 'host' in side:
-                iface = 'eth0'
-            if 'client' in side:
-                iface = 'eth1'
-
-        return iface
+                            '''.format(self.interface))
 
     def __new__(cls, *args, **kwargs):
         """
