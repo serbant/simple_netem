@@ -132,8 +132,24 @@ class NetemInterfaceBusyError(NetemBaseError):
         '''
         :arg str interface: the name of a network device
         '''
-        message = '{} is already used for another emulation'.format(interface)
+        message = 'device {} is already being used for another emulation'.\
+            format(interface)
         super(NetemInterfaceBusyError, self).__init__(message)
+
+
+class NetemSideAlreadyDefinedError(NetemBaseError):
+    '''
+    raised when one tries to start a new NetemInterface instance on a
+    network device already in use
+    '''
+
+    def __init__(self, side, **dummy_kwargs):
+        '''
+        :arg str side: the name of a network device
+        '''
+        message = 'side {} is already being used for another emulation'.\
+            format(side)
+        super(NetemSideAlreadyDefinedError, self).__init__(message)
 
 
 class NetemInsufficientInterfaces(NetemBaseError):

@@ -91,7 +91,6 @@ netem_add = 'sudo tc qdisc add dev'
 netem_stat = 'tc -s qdisc show dev'
 iface_ctrl = 'sudo ip link set dev'
 iface_stat = 'ip link show dev'
-iface_list = 'ip link show'
 
 
 class Command(object):
@@ -374,7 +373,7 @@ class NetemInterface(object):
                 err='must specify a network device')
 
         self.interface = interface
-
+        self.side = side or self.interface
         self.logger = logger or get_logger()
 
         interfaces = self.get_interfaces()
@@ -389,16 +388,6 @@ class NetemInterface(object):
             raise netem_exceptions.NetemInvalidInterface(
                 self.interface, interfaces.keys())
 
-        # we're out of interfaces, bail on this one but don't throw an error
-        # TODO: change the condition here; it work like this because we assume
-        # the user is not doing anything stupid. the correct condition would be
-        # to look in NetemInterface.instances and bail if there is on that
-        # already uses the interface
-        if len(NetemInterface.instances) > len(interfaces.keys()):
-            raise netem_exceptions.NetemInterfaceBusyError(self.interface)
-
-        self.side = side or self.interface
-
         # and we're good to go
         # but let's make sure there's no qdisc already running on this thing
         self.del_qdisc_netem()
@@ -409,25 +398,71 @@ class NetemInterface(object):
         self.logger.info('''netem control server running on interface {},
                             '''.format(self.interface))
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, interface, side=None, *args, **kwargs):
         """
-        keep track of class instances to check against the number of interfaces
+        there are some restrictions on how instances of the
+        :classL`<NetemInterface>` are constructed, namely:
 
-        the point of this class is to control an ethernet port. it is possible
-        in theory to run more instances of this class than the number of
-        ethernet interfaces available on the node but it would create
-        confusion as to which instance is currently controlling an interface.
+        *    the interface argument value cannot be reused. had that been
+             allowed, it would be possible to have multiple (and multiple
+             remote) instances controlling the same network device.
 
-        it is a good idea to only allow one instance per interface
+             an extreme case of such a situation would be one instance setting
+             the device in the UP state, and another instance setting the
+             device in the DOWN state which is really not a good idea.
+
+             it is possible to keep track of the device states and prevent
+             such conflicts but it is much simpler (KISS) to just not allow
+             more than one instance per network device.
+
+             this also makes it easier to identify the instance(s) for
+             remote access by enforcing a logical "unique" identifier for
+             each instance
+
+        *    the side member is intended to provide an easier way to describe
+             which instance controls which network device. it is sometimes
+             easier to just say 'i want to delay traffic on the host side'
+             instead of remembering that the network device controlling
+             traffic on the host side is enp2s0.
+
+             when not specified, the side member is initialized with the value
+             of the interface argument and the restraint at the previous
+             bullet point will handle this restraint. but otherwise one must
+             make sure that the side member respects the same unique
+             constraint as the interface member
 
         this method updates a class variable each time a new object is
-        initialized. the constructor checks if we are trying to start
-        more than one instance per interface by looking at the class variable
+        initialized. it will raise an exception if either the interface arg or
+        the side argument are present in previously defined instances.
+
+        :arg str interface: the name of the network device
+
+        :arg str side:
+            the side (symbolic) name by which one identifies the new instance
+
+        :raises:
+
+            :exceptions:`<netem_exceptions.NetemInterfaceBusyError>` when the
+            interface constraint kick in
+
+            :exceptions:`<netem_exceptions.NetemSideAlreadyDefinedError>` when
+            the side constraint kicks in
 
         """
         instance = object.__new__(cls, *args, **kwargs)
+
+        # first make sure the class variable exists
         if 'instances' not in cls.__dict__:
             cls.instances = WeakSet()
+
+        # look for instances that are already using the interface and/or side
+        # args but only if this is not the first instance
+        if len(cls.instances):
+            if interface in [instance.interface for instance in cls.instances]:
+                raise netem_exceptions.NetemInterfaceBusyError(interface)
+            if side in [instance.side for instance in cls.instances]:
+                raise netem_exceptions.NetemSideAlreadyDefinedError(side)
+
         cls.instances.add(instance)
         return instance
 
@@ -474,7 +509,7 @@ class NetemInterface(object):
             a tuple with the return code from the subprocess command and either
             the output or the error from said command
         """
-        cmd = '{} {}'.format(iface_stat, self.iface)
+        cmd = '{} {}'.format(iface_stat, self.interface)
         return self.__call_execute__(cmd)
 
     def __call_execute__(self, cmd):
@@ -492,8 +527,10 @@ class NetemInterface(object):
             0, 'this is my stdout' is specific of successful commands
             1, 'this is my stderr' is specific of failed commands
         """
-        if self.state not in ['starting', 'emulating', 'waiting', 'blocking']:
-            return (1, self.last_error)
+        #======================================================================
+        # if self.state not in ['starting', 'emulating', 'waiting', 'blocking']:
+        #     return (1, self.last_error)
+        #======================================================================
 
         self.logger.debug('''executing {}'''.format(cmd))
         ret, out, error = execute(cmd)
@@ -520,7 +557,7 @@ class NetemInterface(object):
             a tuple with the return code from the subprocess command and either
             the output or the error from said command
         """
-        cmd = '{} {}'.format(netem_stat, self.iface)
+        cmd = '{} {}'.format(netem_stat, self.interface)
         ret, out = self.__call_execute__(cmd)
         self.iface_stats = dict(iface_stat=self.get_iface_state(),
                                 netem_stat=out)
