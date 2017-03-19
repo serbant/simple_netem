@@ -1,9 +1,9 @@
 """
-.. _simple_netem_control:
+.. _simple_netem_emulations:
 
 python wrapper for linux commands that provide basic WAN emulations
 
-:module:     simple_netem_control
+:module:     simple_netem.emulations
 
 :copyright:
 
@@ -66,8 +66,9 @@ from __future__ import (
 
 import re
 import warnings
-
 import six
+
+from collections import Counter
 
 
 __version__ = '0.0.1'
@@ -108,11 +109,30 @@ class EmulationArgTypeError(TypeError):
         :arg string message: the exception message
 
         '''
-        self.message = 'emulation argument format error in'
-        ' {}: expecting {} {}'.format(
+        self.message = 'argument error in {}: expecting {} {}'.format(
             arg, emulation, message)
         super(EmulationArgTypeError, self).__init__(message)
 
+
+class EmulationHasDuplicatesError(Exception):
+    '''
+    raised when one tries to add duplicate emulations
+
+    it is technically possible to call netem with the same command multiple
+    times within the same tc command but that may lead to confusion
+    '''
+
+    def __init__(self, dupes, msg=None):
+        '''
+        :arg dict dupes:
+
+        :arg str msg:
+        '''
+        if msg is None:
+            msg = 'repeated %s emulations in the same netem command' \
+                % ', '.join([key.__name__ for key in dupes.keys()])
+        super(EmulationHasDuplicatesError, self).__init__(msg)
+        self.dupes = dupes
 
 # pylint: disable=R0903
 
@@ -122,6 +142,38 @@ class Emulation(object):
     base class for netem emulations
     '''
     emulation = None
+
+    @staticmethod
+    def has_no_duplicates(emulations):
+        '''
+        it is a bad idea to issue netem commands that duplicate a specific
+        emulation
+
+        this method takes a list of emulation objects as instantiated by
+        children of this class and complains if there is more than one
+        instance for the same class
+
+        it uses the collections.Counter() function to retrieve the number of
+        times a specific emulation type shows up.
+        it will then iterate through the resulting dictionary style object and
+        remove all singletons. if there's anything left after that, we have
+        duplicates and we complain
+
+        :arg list emulations: list of :class:`<Emulation>` children
+
+        :raises: :exception:`<EmulationHasDuplicatesError>`
+        '''
+        type_counter = Counter([type(emulation) for emulation in emulations])
+
+        for key, val in type_counter.items():
+            # pop anything that shows more than once
+            if val == 1:
+                type_counter.pop(key)
+
+        if type_counter:
+            raise EmulationHasDuplicatesError(dict(type_counter))
+
+        return True
 
     def validate_and_add(self, *args, **kwargs):
         '''
