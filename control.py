@@ -579,18 +579,19 @@ class NetemInterface(object):
             self.logger.warning(
                 'no emulation arguments present, aborting command')
 
+        # *args is a tuple, we want a list because it's meaner
+        emulations = list(emulations)
+
         for emulation_ in emulations:
             if not isinstance(emulation_, emulation.Emulation):
                 raise TypeError()
             if 'emulation' in type(emulation_).__name__.lower():
                 raise TypeError('must not use emulation.Emulation directly')
 
-        # check for duplicate emulation and barf if it happens
-
-        import ipdb
-        ipdb.set_trace()
-
         emulation.Emulation.has_no_duplicates(emulations=emulations)
+
+        if emulation.Emulation.reorder_without_delay(emulations):
+            emulations.append(emulation.Delay())
 
     # pylint R0912: too many branches
     # pylint:disable=R0912

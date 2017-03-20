@@ -175,6 +175,33 @@ class Emulation(object):
 
         return True
 
+    @staticmethod
+    def reorder_without_delay(emulations):
+        '''
+        one cannot do reordering without delaying
+
+        :returns:
+            ``True`` if there is a :class:`<Redorder>` emulation instance in
+            the list of emulation objects
+
+            ``False`` if there is no :class:`<Redorder>` emulation instance in
+            the list of emulation objects or if there is one that is already
+            accompanied by a :class:`<Delay>` emulation instance
+        '''
+        reorder = [
+            emulation for emulation in emulations if isinstance(emulation,
+                                                                Reorder)]
+        delay = [
+            emulation for emulation in emulations if isinstance(emulation,
+                                                                Delay)]
+
+        if reorder and delay:
+            return False
+        elif not reorder:
+            return False
+        else:
+            return True
+
     def validate_and_add(self, *args, **kwargs):
         '''
         add each arg in *args to the emulation property but only if arg is
