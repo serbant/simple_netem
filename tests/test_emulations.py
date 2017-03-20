@@ -1,4 +1,4 @@
-""" unit tests for simple_netem.emulations """
+""" unit tests for simple_netem.emulation """
 import os
 import sys
 
@@ -7,12 +7,12 @@ import pytest
 # modules under test are one directory up, make sure python can find them
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-import emulations   # pylint:disable=F0401,C0413
+import emulation   # pylint:disable=F0401,C0413
 
 
 class TestEmulation(object):
     '''
-    test class for :class:`<emulations._Emulation>`
+    test class for :class:`<emulation._Emulation>`
     '''
     @pytest.mark.parametrize(
         'test_id,emulation,test_input,defaults,expected',
@@ -27,7 +27,7 @@ class TestEmulation(object):
         test the validate_and_arg() method on happy paths
 
         '''
-        emulating = emulations.Emulation()
+        emulating = emulation.Emulation()
         emulating.emulation = emulation
         if defaults:
             emulating.validate_and_add(test_input, **defaults)
@@ -43,9 +43,9 @@ class TestEmulation(object):
         '''
         test that validate_and_add() method raises the proper exceptions
         '''
-        emulating = emulations.Emulation()
+        emulating = emulation.Emulation()
         emulating.emulation = 'bogus'
-        with pytest.raises(emulations.EmulationArgTypeError) as error:
+        with pytest.raises(emulation.EmulationArgTypeError) as error:
             emulating.validate_and_add(test_input)
 
         assert expect_in_error in error.value.args[0]

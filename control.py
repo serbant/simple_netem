@@ -1,7 +1,7 @@
 """
 .. _simple_netem_control:
 
-python wrapper for linux commands that provide basic WAN emulations
+python wrapper for linux commands that provide basic WAN emulation
 
 :module:     simple_netem_control
 
@@ -38,9 +38,9 @@ for details
 Supported WAN Emulations
 ------------------------
 
-This module can provide any combination of the WAN conditions (emulations)
+This module can provide any combination of the WAN conditions (emulation)
 listed below but only on a per network interface basis. It does not support
-per flow emulations.
+per flow emulation.
 
 * packet delay
 
@@ -74,7 +74,7 @@ import logging
 from weakref import WeakSet
 
 import netem_exceptions
-import emulations
+import emulation
 
 __version__ = '0.0.1'
 
@@ -130,7 +130,7 @@ class Command(object):
     @staticmethod
     def remove_all_emulations(device):
         '''
-        :returns: the command to remove all emulations from a network device
+        :returns: the command to remove all emulation from a network device
 
         :arg str device:
         '''
@@ -142,7 +142,7 @@ class Command(object):
     @staticmethod
     def show_emulations(device):
         '''
-        :returns: the os command to show the emulations runing on a device
+        :returns: the os command to show the emulation runing on a device
 
         :arg str device:
         '''
@@ -560,37 +560,37 @@ class NetemInterface(object):
 
         return False
 
-    def add_emulations(self, *emulation_objects):
+    def add_emulations(self, *emulations):
         '''
-        apply one or more netem disciplines (emulations) to the network
+        apply one or more netem disciplines (emulation) to the network
         device controlled by this instance
 
         :arg *default_emulations:
-            use the specified emulations with the default arguments present
+            use the specified emulation with the default arguments present
             in the emulation classes
 
         :arg **custom_emulations:
-            use emulations with fully (or partially) defined arguments
+            use emulation with fully (or partially) defined arguments
 
         obviously, a syntax error is raised if there are conflicts between
-        *default_emulations and **emulations
+        *default_emulations and **emulation
         '''
-        if not emulation_objects:
+        if not emulations:
             self.logger.warning(
                 'no emulation arguments present, aborting command')
 
-        for emulation_object in emulation_objects:
-            if not isinstance(emulation_object, emulations.Emulation):
+        for emulation_ in emulations:
+            if not isinstance(emulation_, emulation.Emulation):
                 raise TypeError()
-            if 'emulation' in type(emulation_object).__name__.lower():
-                raise TypeError('must not use emulations.Emulation directly')
+            if 'emulation' in type(emulation_).__name__.lower():
+                raise TypeError('must not use emulation.Emulation directly')
 
-        # check for duplicate emulations and barf if it happens
+        # check for duplicate emulation and barf if it happens
 
         import ipdb
         ipdb.set_trace()
 
-        emulations.Emulation.has_duplicates(emulations=emulation_objects)
+        emulation.Emulation.has_no_duplicates(emulations=emulations)
 
     # pylint R0912: too many branches
     # pylint:disable=R0912
@@ -667,7 +667,7 @@ class NetemInterface(object):
         :param loss_random:
             netem random loss emulation
 
-            this parameter will pre-empt any other loss emulations
+            this parameter will pre-empt any other loss emulation
             the correlation attribute is deprecated and its use will raise a
             warning
 
@@ -677,7 +677,7 @@ class NetemInterface(object):
         :param loss_gemodel:
             netem loss emulation using the Gilbert-Elliot model
 
-            this parameter will pre-empt loss state based emulations; this
+            this parameter will pre-empt loss state based emulation; this
             parameter is pre-empted by loss random
             this parameter is not properly supported by some iproute2 versions
 
@@ -689,8 +689,8 @@ class NetemInterface(object):
         :param loss_state:
             netem loss emulation using a 4 state Markhov model
 
-            this parameter will pre-empted by both random loss emulations and
-            Gilbert-Elliot model loss emulations
+            this parameter will pre-empted by both random loss emulation and
+            Gilbert-Elliot model loss emulation
 
             format: {'p13': numeric_positive_0_100,
                      'p31': numeric_positive_0_100,
@@ -721,7 +721,7 @@ class NetemInterface(object):
         self.logger.debug(cmd)
 
         if isinstance(delay, dict):
-            cmd = '{} {}'.format(cmd, emulations.Delay(**delay).emulation)
+            cmd = '{} {}'.format(cmd, emulation.Delay(**delay).emulation)
             self.logger.debug(cmd)
         else:
             if delay:
@@ -734,10 +734,10 @@ class NetemInterface(object):
         if isinstance(reorder, dict):
             # reorder also needs delay
             if 'delay' not in cmd:
-                cmd = '{} {}'.format(cmd, emulations.Delay(
+                cmd = '{} {}'.format(cmd, emulation.Delay(
                     delay=10).emulation)
             cmd = '{} {}'.format(
-                cmd, emulations.Reorder(**reorder).emulation)
+                cmd, emulation.Reorder(**reorder).emulation)
             self.logger.debug(cmd)
         else:
             if reorder:
@@ -749,7 +749,7 @@ class NetemInterface(object):
 
         if isinstance(corrupt, dict):
             cmd = '{} {}'.format(
-                cmd, emulations.Corrupt(**corrupt).emulation)
+                cmd, emulation.Corrupt(**corrupt).emulation)
             self.logger.debug(cmd)
         else:
             if corrupt:
@@ -761,7 +761,7 @@ class NetemInterface(object):
 
         if isinstance(duplicate, dict):
             cmd = '{} {}'.format(
-                cmd, emulations.Duplicate(**duplicate).emulation)
+                cmd, emulation.Duplicate(**duplicate).emulation)
             self.logger.debug(cmd)
         else:
             if duplicate:
@@ -772,7 +772,7 @@ class NetemInterface(object):
                 )
 
         if isinstance(rate, dict):
-            cmd = '{} {}'.format(cmd, emulations.Rate(**rate).emulation)
+            cmd = '{} {}'.format(cmd, emulation.Rate(**rate).emulation)
             self.logger.debug(cmd)
         else:
             if rate:
@@ -787,7 +787,7 @@ class NetemInterface(object):
             loss_gemodel = ''
             loss_state = ''
             cmd = '{} {}'.format(
-                cmd, emulations.LossRandom(**loss_random).emulation
+                cmd, emulation.LossRandom(**loss_random).emulation
             )
             self.logger.debug(cmd)
         else:
@@ -802,7 +802,7 @@ class NetemInterface(object):
         if isinstance(loss_gemodel, dict):
             loss_state = ''
             cmd = '{} {}'.format(
-                cmd, emulations.LossGemodel(**loss_gemodel).emulation
+                cmd, emulation.LossGemodel(**loss_gemodel).emulation
             )
             self.logger.debug(cmd)
         else:
@@ -815,7 +815,7 @@ class NetemInterface(object):
 
         if isinstance(loss_state, dict):
             cmd = '{} {}'.format(
-                cmd, emulations.LossState(**loss_state).emulation)
+                cmd, emulation.LossState(**loss_state).emulation)
         else:
             if loss_state:
                 raise netem_exceptions.NetemConfigException(
@@ -825,9 +825,9 @@ class NetemInterface(object):
                 )
 
         if isinstance(limit, dict):
-            # limit only makes sense if other emulations are applied
+            # limit only makes sense if other emulation are applied
             if len(cmd) > len(cmd_root):
-                cmd = '{} {}'.format(cmd, emulations.Limit(**limit).emulation)
+                cmd = '{} {}'.format(cmd, emulation.Limit(**limit).emulation)
                 self.logger.debug(cmd)
             else:
                 msg = 'bare limit=%s emulation, ignoring' % limit
@@ -861,8 +861,8 @@ class NetemInterface(object):
             self.__execute__(Command.remove_all_emulations(self.interface))
 
         self.state = self.State.ready
-        self.logger.info('no emulations for %s on %s' % (self.side,
-                                                         self.interface))
+        self.logger.info('no emulation for %s on %s' % (self.side,
+                                                        self.interface))
 
     def remove_emulation(self):
         '''
@@ -872,4 +872,4 @@ class NetemInterface(object):
         '''
         raise NotImplementedError(
             'please use self.remove_all_emulations() and then re-apply'
-            ' any desired emulations')
+            ' any desired emulation')
