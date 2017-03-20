@@ -21,6 +21,12 @@
 
 :contact:    serbant@gmail.com
 
+#TODO: clean this up:
+
+    *    rename to exceptions
+    *    when needed do from .exceptions import whatever
+    *    redo the NetemBaseError and all the things around it
+
 """
 from __future__ import unicode_literals
 
@@ -56,6 +62,28 @@ class NetemSideException(NetemBaseError):
     def __init__(self, **dummy_kwargs):
         message = 'the side argument is mandatory'
         super(NetemSideException, self).__init__(message)
+
+
+class NetemCommandError(NetemBaseError):
+    '''
+    riased when an os command implementing a netem operation fails (more
+    exactly when the return code is not 0)
+    '''
+
+    def __init__(self, cmd, error, **dummy_kwargs):
+        '''
+        :arg cmd: the command that caused the error
+
+        :arg error: the representation of the stderr returned by the command
+        '''
+        pass
+
+
+class NetemInvalidEmulationError(NetemBaseError):
+    '''
+    raise when an emulation argument doesn't match
+    '''
+    pass
 
 
 class NetemCtrlFqdnException(NetemBaseError):
