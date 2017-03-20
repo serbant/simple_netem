@@ -85,12 +85,7 @@ else:
     LOG_LEVEL = logging.WARN
 
 
-# ip and tc command prefixes
-netem_del = 'sudo tc qdisc del dev'
 netem_add = 'sudo tc qdisc add dev'
-netem_stat = 'tc -s qdisc show dev'
-iface_ctrl = 'sudo ip link set dev'
-iface_stat = 'ip link show dev'
 
 
 class Command(object):
@@ -231,7 +226,7 @@ def execute(cmd):
         proc = subprocess.Popen(
             shlex.split(cmd), bufsize=-1, stdout=subprocess.PIPE,
             stdin=subprocess.PIPE, stderr=subprocess.PIPE)
-        talk_back, choked = proc.communicate()
+        output, error = proc.communicate()
     except OSError as err:
         return (1, 'cannot execute {}'.format(cmd), err)
     except ValueError as err:
@@ -239,7 +234,7 @@ def execute(cmd):
     except Exception as err:  # pylint:disable=W0703
         return (1, 'unexpected error on command {}'.format(cmd), err)
 
-    return (proc.returncode, talk_back.decode(), choked.decode())
+    return (proc.returncode, output.decode(), error.decode())
 
 
 class NetemInterface(object):
@@ -390,13 +385,14 @@ class NetemInterface(object):
 
         # and we're good to go
         # but let's make sure there's no qdisc already running on this thing
-        self.del_qdisc_netem()
-        self.iface_up()
+        self.remove_emulations()
+        self.set_interface_up()
 
         self.state = self.State.ready
 
-        self.logger.info('''netem control server running on interface {},
-                            '''.format(self.interface))
+        self.logger.info(
+            'netem control server running for %s on %s' % (self.side,
+                                                           self.interface))
 
     def __new__(cls, interface, side=None, *args, **kwargs):
         """
@@ -466,162 +462,139 @@ class NetemInterface(object):
         cls.instances.add(instance)
         return instance
 
-    def heartbeat(self):
-        """
-        tick-tock method
+    @property
+    def info(self):
+        '''
+        :returns: a `dict` with the full information available for this
+            netem control instance
+        '''
+        return dict(side=self.side,
+                    device=self.interface,
+                    server_state=self.state,
+                    device_state=self.interface_info,
+                    active_emulations=self.emulation_info)
 
+    @property
+    def interface_info(self):
+        """
         :returns:
-            the app state
+            the output from::
+
+                ip link show dev $device_name
         """
-        return self.state
+        return self.__execute__(Command.ifshow(self.interface))
 
-    def diagnose(self):
+    def __execute__(self, cmd):
         """
-        more detailed tick-tock method
-
-        :returns:
-            a tuple (app state, interface stats, last error on interface)
-        """
-        return (self.state, self.iface_stats, self.last_error)
-
-    def get_side(self):
-        """
-        return the relative side of the interface where the instance is
-        running
-
-        the side can be arbritrary (it's an __init__() parm but one expects
-        a little logic when contructing the instance.
-        the is needed to provide distinction on the client side if one
-        has a ntem node with more than one uri
-
-        """
-        return self.side
-
-    def get_iface_state(self):
-        """
-        check the link
-
-        this will be exposed via PyroApp and is the equivalent of calling::
-
-            ip link show dev $interface_name
-
-        :returns:
-            a tuple with the return code from the subprocess command and either
-            the output or the error from said command
-        """
-        cmd = '{} {}'.format(iface_stat, self.interface)
-        return self.__call_execute__(cmd)
-
-    def __call_execute__(self, cmd):
-        """
-        execute the command prepared by the calling method, log what's happening,
+        execute the command prepared by the calling method, log teh results
         smooch the returns
 
         :param cmd:
             the command
 
         :returns:
-            a tuple with the system style return code of the command and its
-            output
+            the output of the command as returned by the operating system
 
-            0, 'this is my stdout' is specific of successful commands
-            1, 'this is my stderr' is specific of failed commands
+        :raises:
+            :exception:`<netem_exceptions.NetemCommandError>`
         """
-        #======================================================================
-        # if self.state not in ['starting', 'emulating', 'waiting', 'blocking']:
-        #     return (1, self.last_error)
-        #======================================================================
-
-        self.logger.debug('''executing {}'''.format(cmd))
+        self.logger.debug('executing %s' % cmd)
         ret, out, error = execute(cmd)
-
         if ret:
-            self.logger.error('''command {} returned error {}'''.format(cmd,
-                                                                        error))
-            self.last_error = error
-            return (ret, error)
+            self.logger.error('returned error %s' % error)
+            raise netem_exceptions.NetemCommandError(cmd, error)
 
-        self.logger.debug('''returned {}'''.format(out))
-        self.last_error = ''
-        return (ret, out)
+        self.logger.debug('ok, returned %s' % out)
+        return out
 
-    def get_qdisc_netem(self):
+    @property
+    def emulation_info(self):
         """
         get the netem stats
 
-        is the equivalent of executing::
-
-            tc -s qdisc show dev $interface_name
 
         :returns:
-            a tuple with the return code from the subprocess command and either
-            the output or the error from said command
+            the output from executing::
+
+                tc -s qdisc show dev $interface_name
+
         """
-        cmd = '{} {}'.format(netem_stat, self.interface)
-        ret, out = self.__call_execute__(cmd)
-        self.iface_stats = dict(iface_stat=self.get_iface_state(),
-                                netem_stat=out)
+        return self.__execute__(Command.show_emulations(self.interface))
 
-        return ret, out
-
-    def is_iface_up(self):
+    @property
+    def is_interface_up(self):
         """
         is the network interface up?
         """
-        ret, out = self.get_iface_state()
-
-        if 'state UP' in out:
+        if 'state UP' in self.interface_info:
             return True
 
         return False
 
-    def iface_up(self):
+    def set_interface_up(self):
         """
         bring up the interface
         """
-        if not self.is_iface_up():
-            cmd = '{} {} up'.format(iface_ctrl, self.iface)
-            ret, out = self.__call_execute__(cmd)
-        else:
-            ret, out = (0, '')
+        if not self.is_interface_up:
+            self.__execute__(Command.ifup(self.interface))
 
-        if self.is_emulating():
-            self.state = 'emulating'
-        else:
-            self.state = 'waiting'
+        self.logger.info('interface state: %s' % self.interface_info)
 
-        self.iface_stats = dict(iface_stat=self.get_iface_state(),
-                                netem_stat=self.get_qdisc_netem())
-        return ret, out
-
-    def iface_down(self):
+    def set_interface_down(self):
         """
         bring down the interface
         """
-        if self.is_iface_up():
-            cmd = '{} {} down'.format(iface_ctrl, self.iface)
-            ret, out = self.__call_execute__(cmd)
-        else:
-            ret, out = (0, '')
+        if self.is_interface_up:
+            self.__execute__(Command.ifdown(self.interface))
 
-        self.state = 'blocking'
-        self.iface_stats = dict(iface_stat=self.get_iface_state(),
-                                netem_stat=self.get_qdisc_netem())
-        return ret, out
+        self.state = self.State.blocking
+        self.logger.info('interface state: %s' % self.interface_info)
 
+    @property
     def is_emulating(self):
         """
         is there an active netem discipline applied
         """
-        ret, out = self.get_qdisc_netem()
-
-        if 'netem' in out:
+        if 'netem' in self.emulation_info:
             return True
 
         return False
 
+    def add_emulations(self, *emulation_objects):
+        '''
+        apply one or more netem disciplines (emulations) to the network
+        device controlled by this instance
+
+        :arg *default_emulations:
+            use the specified emulations with the default arguments present
+            in the emulation classes
+
+        :arg **custom_emulations:
+            use emulations with fully (or partially) defined arguments
+
+        obviously, a syntax error is raised if there are conflicts between
+        *default_emulations and **emulations
+        '''
+        if not emulation_objects:
+            self.logger.warning(
+                'no emulation arguments present, aborting command')
+
+        for emulation_object in emulation_objects:
+            if not isinstance(emulation_object, emulations.Emulation):
+                raise TypeError()
+            if 'emulation' in type(emulation_object).__name__.lower():
+                raise TypeError('must not use emulations.Emulation directly')
+
+        # check for duplicate emulations and barf if it happens
+
+        import ipdb
+        ipdb.set_trace()
+
+        emulations.Emulation.has_duplicates(emulations=emulation_objects)
+
     # pylint R0912: too many branches
     # pylint:disable=R0912
+
     def add_qdisc_netem(self, limit='', delay='', reorder='', corrupt='',
                         duplicate='', rate='', loss_random='', loss_state='',
                         loss_gemodel=''):
@@ -740,10 +713,10 @@ class NetemInterface(object):
         """
 
         # first, remove any previous netem configuration
-        self.del_qdisc_netem()
+        self.remove_emulations()
 
         self.logger.debug('''preparing add netem comand''')
-        cmd_root = '{} {} root netem'.format(netem_add, self.iface)
+        cmd_root = '{} {} root netem'.format(netem_add, self.interface)
         cmd = cmd_root
         self.logger.debug(cmd)
 
@@ -869,30 +842,34 @@ class NetemInterface(object):
                     accepts='must be a dictionary'
                 )
 
-        ret, out = self.__call_execute__(cmd)
+        ret, out = self.__execute__(cmd)
         if not ret:
             self.state = 'emulating'
 
-        self.iface_stats = dict(iface_stat=self.get_iface_state(),
-                                netem_stat=self.get_qdisc_netem())
+        self.iface_stats = dict(iface_stat=self.interface_info(),
+                                netem_stat=self.emulation_info())
         return ret, out
 
-    def del_qdisc_netem(self):
+    def remove_emulations(self):
         """
         we always assume that qdisc is applied on the device root,
         no fancy handles
         do a::
             sudo tc qdisc del dev self.iface root
         """
-        if self.is_emulating():
-            cmd = '{} {} root'.format(netem_del, self.iface)
-            ret, out = self.__call_execute__(cmd)
-        else:
-            ret, out = (0, '')
+        if self.is_emulating:
+            self.__execute__(Command.remove_all_emulations(self.interface))
 
-        if not ret:
-            self.state = 'waiting'
+        self.state = self.State.ready
+        self.logger.info('no emulations for %s on %s' % (self.side,
+                                                         self.interface))
 
-        self.iface_stats = dict(iface_stat=self.get_iface_state(),
-                                netem_stat=self.get_qdisc_netem())
-        return ret, out
+    def remove_emulation(self):
+        '''
+        remove a single emulation
+
+        :raises: :exception:`<NotImplementedError>`
+        '''
+        raise NotImplementedError(
+            'please use self.remove_all_emulations() and then re-apply'
+            ' any desired emulations')
