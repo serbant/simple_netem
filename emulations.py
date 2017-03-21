@@ -93,28 +93,31 @@ SCANF_MEASUREMENT = re.compile(
 '''
 
 
-class EmulationArgTypeError(TypeError):
+class EmulationTypeError(TypeError):
     '''
     custom exception class to be raised when an emulation is being fed an
     invalid argument
     '''
 
-    def __init__(self, emulation, arg, message):
+    def __init__(self, emulation, arg, msg=None):
         '''
         :arg string emulation:
             the value of the :class:`<Emulation>` emulation member
 
         :arg arg: the value of the argument that fails the validation
 
-        :arg string message: the exception message
+        :arg string msg: the exception message
 
         '''
-        self.message = 'argument error in {}: expecting {} {}'.format(
-            arg, emulation, message)
-        super(EmulationArgTypeError, self).__init__(message)
+        if msg is None:
+            msg = 'argument error in {}: expecting {} {}'.format(
+                arg, emulation, msg)
+        super(EmulationTypeError, self).__init__(msg)
+        self.emulation = emulation
+        self.arg = arg
 
 
-class EmulationHasDuplicatesError(Exception):
+class EmulationValueError(ValueError):
     '''
     raised when one tries to add duplicate emulations
 
@@ -122,19 +125,16 @@ class EmulationHasDuplicatesError(Exception):
     times within the same tc command but that may lead to confusion
     '''
 
-    def __init__(self, dupes, msg=None):
+    def __init__(self, value, msg=None):
         '''
         :arg dict dupes:
 
         :arg str msg:
         '''
         if msg is None:
-            msg = 'repeated %s emulations in the same netem command' \
-                % ', '.join([key.__name__ for key in dupes.keys()])
-        super(EmulationHasDuplicatesError, self).__init__(msg)
-        self.dupes = dupes
-
-# pylint: disable=R0903
+            msg = 'bad value: %s' % value
+        super(EmulationValueError, self).__init__(msg)
+        self.value = value
 
 
 class Emulation(object):
@@ -161,22 +161,25 @@ class Emulation(object):
 
         :arg list emulations: list of :class:`<Emulation>` children
 
-        :raises: :exception:`<EmulationHasDuplicatesError>`
+        :raises: :exception:`<EmulationValueError>`
         '''
         type_counter = Counter([type(emulation) for emulation in emulations])
 
+        dupes_counter = dict()
         for key, val in type_counter.items():
             # pop anything that shows more than once
-            if val == 1:
-                type_counter.pop(key)
+            if val > 1:
+                dupes_counter[key] = val
 
-        if type_counter:
-            raise EmulationHasDuplicatesError(dict(type_counter))
+        if dupes_counter:
+            value = ', '.join([key.__name__ for key in dupes_counter.keys()])
+            msg = 'duplicate netem commands in one emulation: %s' % value
+            raise EmulationValueError(value, msg)
 
         return True
 
     @staticmethod
-    def reorder_without_delay(emulations):
+    def has_reorder_without_delay(emulations):
         '''
         one cannot do reordering without delaying
 
@@ -202,6 +205,54 @@ class Emulation(object):
         else:
             return True
 
+    @staticmethod
+    def has_no_multiple_loss_emulations(emulations):
+        '''
+        there are 3 kinds of packet loss emulations available:
+
+        *    loss random
+        *    loss state
+        *    loss gemodel
+
+        it doesn't make any sense to allow for more than one of them to be
+        active at the same time
+
+        this method will raise an exception if more than one loss emulation
+        is present in the argument
+
+        the method creates a list of booleans. if a loss emulation is present,
+        the element is set to ``True``, otherwise the element is not set.
+        the method then uses the :class:`<collections.Counter>` to count
+        the occurrences of ``True``
+
+        :arg emulations:
+        '''
+        loss_counter = Counter(
+            [True for emulation in emulations if isinstance(
+                emulation, (LossRandom, LossState, LossGemodel))]
+        )
+
+        if loss_counter.get(True) > 1:
+            value = ', '.join([key.__name__ for key in loss_counter.keys()])
+            msg = 'multiple netem loss commands in one emulation: %s' % value
+            raise EmulationValueError(value, msg)
+
+        return True
+
+    @staticmethod
+    def has_limit(emulations):
+        '''
+        netem will place a limit in any add netem command by default but
+        that applies for only 1000 packets
+
+        this method checks if there is a non-default netem limit command
+        within a list of emulations
+        '''
+        if [emulation for emulation in emulations if isinstance(emulation,
+                                                                Limit)]:
+            return True
+        return False
+
     def validate_and_add(self, *args, **kwargs):
         '''
         add each arg in *args to the emulation property but only if arg is
@@ -217,7 +268,7 @@ class Emulation(object):
         using a space as separator
 
         :raises:
-            :exception:`<EmulationArgTypeError>` if any arg fails validation
+            :exception:`<EmulationTypeError>` if any arg fails validation
 
         :param args:
             the emulation arguments to be validated and added to the emulation
@@ -277,26 +328,26 @@ class Emulation(object):
 
             :returns: the numeric part of the arg
 
-            :raises: :exception:`<EmulationArgTypeError>`
+            :raises: :exception:`<EmulationTypeError>`
             '''
             try:
                 arg_value = float(arg_match.groups()[0])
                 if integer:
                     arg_value = int(arg_value)  # pylint:disable=R0204
             except ValueError:
-                raise EmulationArgTypeError(
+                raise EmulationTypeError(
                     emulation=self.emulation, arg=arg,
-                    message='must start with a number')
+                    msg='must start with a number')
 
             if positive and arg_value <= 0:
-                raise EmulationArgTypeError(
+                raise EmulationTypeError(
                     emulation=self.emulation, arg=arg,
-                    message='must start with a positive number')
+                    msg='must start with a positive number')
 
             if lt_100 and arg_value > 100:
-                raise EmulationArgTypeError(
+                raise EmulationTypeError(
                     emulation=self.emulation, arg=arg,
-                    message='must start with a number smaller than 100')
+                    msg='must start with a number smaller than 100')
 
             return str(arg_value)
 
@@ -310,7 +361,7 @@ class Emulation(object):
 
             :returns: the numeric part of the arg
 
-            :raises: :exception:`<EmulationArgTypeError>`
+            :raises: :exception:`<EmulationTypeError>`
             '''
             arg_units = arg_match.groups()[5].lower()
 
@@ -322,9 +373,9 @@ class Emulation(object):
                     arg_units = default_unit
 
             if arg_units not in units:
-                raise EmulationArgTypeError(
+                raise EmulationTypeError(
                     emulation=self.emulation, arg=arg,
-                    message='invalid measurement unit. must be one of %s' %
+                    msg='invalid measurement unit. must be one of %s' %
                     ', '.join(units))
 
             return arg_units
@@ -345,9 +396,9 @@ class Emulation(object):
             arg_match = re.match(SCANF_MEASUREMENT, arg)
             if not arg_match:
                 # hard to believe but maybe
-                raise EmulationArgTypeError(
+                raise EmulationTypeError(
                     emulation=self.emulation, arg=arg,
-                    message='a measurement'
+                    msg='a measurement'
                     ' (a numeric value followed by an optional separator'
                     ' and an optional measurement unit)')
 
@@ -390,7 +441,7 @@ class LossRandom(Emulation):
 
         :raises:
 
-            :exception:`<EmulationArgTypeError>` if passed invalid parameters
+            :exception:`<EmulationTypeError>` if passed invalid parameters
 
             :warnings:`<DeprecationWarning>` if correlation is present
         """
@@ -524,12 +575,12 @@ class LossState(Emulation):
             numeruc between 0 and 100, default 1
 
         :raises:
-            :exception:`<EmulationArgTypeError>` if passed invalid parameters
+            :exception:`<EmulationTypeError>` if passed invalid parameters
         """
         self.emulation = 'loss state'
         if not p_13:
             # this one is mandatory
-            raise EmulationArgTypeError(
+            raise EmulationTypeError(
                 emulation=self.emulation, arg='None',
                 message='p_13 is a mandatory argument')
 
@@ -628,12 +679,12 @@ class LossGemodel(Emulation):
         :param one_k:
             probability of a packet being lost when in good state
         :raises:
-            :exception:`<EmulationArgTypeError>` if passed invalid parameters
+            :exception:`<EmulationTypeError>` if passed invalid parameters
         """
         self.emulation = 'loss gemodel'
         if not p:
             # this one is mandatory
-            raise EmulationArgTypeError(
+            raise EmulationTypeError(
                 emulation=self.emulation, arg='None',
                 message='p is a mandatory argument')
 
@@ -690,7 +741,7 @@ class Rate(Emulation):
         :param rate:
         :param units:
         :raises:
-            :exception:`<EmulationArgTypeError>` if passed invalid parameters
+            :exception:`<EmulationTypeError>` if passed invalid parameters
         """
         self.emulation = 'rate'
 
@@ -745,12 +796,12 @@ class Reorder(Emulation):
             optional, default None
             (the entire sequence is subject to reordering), must be an integer
         :raises:
-            :exception:`<EmulationArgTypeError>` if passed invalid parameters
+            :exception:`<EmulationTypeError>` if passed invalid parameters
         """
         self.emulation = 'reorder'
         if not percent:
             # this one is mandatory
-            raise EmulationArgTypeError(
+            raise EmulationTypeError(
                 emulation=self.emulation, arg='None',
                 message='percent is a mandatory argument')
 
@@ -788,13 +839,13 @@ class Duplicate(Emulation):
         :param correlation:
             duplication correlation, must be an integer, optional, default 10
         :raises:
-            :exception:`<EmulationArgTypeError>` if passed invalid parameters
+            :exception:`<EmulationTypeError>` if passed invalid parameters
         """
         self.emulation = 'duplicate'
 
         if not percent:
             # this one is mandatory
-            raise EmulationArgTypeError(
+            raise EmulationTypeError(
                 emulation=self.emulation, arg='None',
                 message='percent is a mandatory argument')
 
@@ -824,12 +875,12 @@ class Corrupt(Emulation):
             packet
 
         :raises:
-            :exception:`<EmulationArgTypeError>` if passed invalid parameters
+            :exception:`<EmulationTypeError>` if passed invalid parameters
         '''
         self.emulation = 'corrupt'
         if not percent:
             # this one is mandatory
-            raise EmulationArgTypeError(
+            raise EmulationTypeError(
                 emulation=self.emulation, arg='None',
                 message='percent is a mandatory argument')
 
@@ -862,12 +913,12 @@ class Limit(Emulation):
         :param limit:
             must be an integer, default 1 million packets
         :raises:
-            :exception:`<EmulationArgTypeError>` if passed invalid parameters
+            :exception:`<EmulationTypeError>` if passed invalid parameters
         """
         self.emulation = 'limit'
         if not limit:
             # this one is mandatory
-            raise EmulationArgTypeError(
+            raise EmulationTypeError(
                 emulation=self.emulation, arg='None',
                 message='limit is a mandatory argument')
 
@@ -955,13 +1006,13 @@ class Delay(Emulation):
             it is possible to specify custom distribution curves if they are
             configured in the kernel
         :raises:
-            :exception:`<EmulationArgTypeError>` if passed invalid parameters
+            :exception:`<EmulationTypeError>` if passed invalid parameters
         """
         self.emulation = 'delay'
 
         if not delay:
             # this one is mandatory
-            raise EmulationArgTypeError(
+            raise EmulationTypeError(
                 emulation=self.emulation, arg='None',
                 message='delay is a mandatory argument')
 
@@ -974,7 +1025,7 @@ class Delay(Emulation):
 
         if distribution:
             if distribution not in self._distributions:
-                raise EmulationArgTypeError(
+                raise EmulationTypeError(
                     emulation=self.emulation, arg='None',
                     message='distribution must be one of %s'
                     % ', '.join(self._distributions))
