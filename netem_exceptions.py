@@ -53,6 +53,21 @@ class NetemBaseError(Exception):
         super(NetemBaseError, self).__init__(message)
 
 
+class NetemError(Exception):
+    '''
+    base custom exception for this package
+    '''
+
+    def __init__(self, msg=None, **kwargs):
+        '''
+        :arg msg: error message
+        '''
+        if msg is None:
+            msg = 'unknown netem error'
+        super(NetemError, self).__init__(msg)
+        self.__dict__.update(kwargs)
+
+
 class NetemSideException(NetemBaseError):
     """
     NetemSideException raised when a NetemInterface instance is initialized
@@ -79,11 +94,22 @@ class NetemCommandError(NetemBaseError):
         pass
 
 
-class NetemInvalidEmulationError(NetemBaseError):
+class NetemOptionsError(NetemError):
     '''
-    raise when an emulation argument doesn't match
+    raise when a netem option error is detected
     '''
-    pass
+
+    def __init__(self, netem_option=None, netem_options=None, msg=None):
+        '''
+        :arg netem_option: the netem option that caused the error
+        :arg netem_options: the list of netem options that caused the error
+        :arg msg: the error message
+        '''
+        if msg is None:
+            msg = 'netem option(s) error'
+        super(NetemOptionsError, self).__init__(msg)
+        self.netem_option = netem_option
+        self.netem_options = netem_options
 
 
 class NetemCtrlFqdnException(NetemBaseError):
@@ -160,7 +186,7 @@ class NetemInterfaceBusyError(NetemBaseError):
         '''
         :arg str interface: the name of a network device
         '''
-        message = 'device {} is already being used for another emulation'.\
+        message = 'device {} is already being used for another emulations'.\
             format(interface)
         super(NetemInterfaceBusyError, self).__init__(message)
 
@@ -175,7 +201,7 @@ class NetemSideAlreadyDefinedError(NetemBaseError):
         '''
         :arg str side: the name of a network device
         '''
-        message = 'side {} is already being used for another emulation'.\
+        message = 'side {} is already being used for another emulations'.\
             format(side)
         super(NetemSideAlreadyDefinedError, self).__init__(message)
 
