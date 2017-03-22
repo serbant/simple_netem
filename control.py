@@ -1,7 +1,7 @@
 """
 .. _simple_netem_control:
 
-python wrapper for linux commands that provide basic WAN emulation
+python wrapper for linux commands that provide basic WAN emulations
 
 :module:     simple_netem_control
 
@@ -26,7 +26,7 @@ python wrapper for linux commands that provide basic WAN emulation
 Simple Netem Control
 ====================
 
-This module contains python classes that expose network (WAN) emulation control
+This module contains python classes that expose network (WAN) emulations control
 functions on linux hosts
 
 The linux commands exposed by this module are the **tc** command and the **ip**
@@ -38,9 +38,9 @@ for details
 Supported WAN Emulations
 ------------------------
 
-This module can provide any combination of the WAN conditions (emulation)
+This module can provide any combination of the WAN conditions (emulations)
 listed below but only on a per network interface basis. It does not support
-per flow emulation.
+per flow emulations.
 
 * packet delay
 
@@ -66,7 +66,6 @@ from __future__ import (
 
 
 import sys
-import warnings
 import subprocess
 import shlex
 import logging
@@ -74,7 +73,7 @@ import logging
 from weakref import WeakSet
 
 import netem_exceptions
-import emulation
+import emulations
 
 __version__ = '0.0.1'
 
@@ -85,9 +84,6 @@ else:
     LOG_LEVEL = logging.WARN
 
 
-netem_add = 'sudo tc qdisc add dev'
-
-
 class Command(object):
     '''
     build and expose all the os command strings as static methods
@@ -95,42 +91,43 @@ class Command(object):
     '''
 
     @staticmethod
-    def add_emulation(device=None, emulation=None):
+    def add_emulation(device=None, cmd_opts=None):
         '''
-        :returns: the os command to add an emulation to a network device
+        :returns: the os command to add an emulations to a network device
         :rtype: str
 
         :arg str device: the network device name
 
-        :arg str emulation: the netem emulation(s)
+        :arg str emulations: the netem emulations(s)
         '''
         cmd = 'sudo tc qdisc add dev'
-        if not device or not emulation:
-            raise netem_exceptions.CommandError('device', 'emulation')
-        return r'{cmd} {device} root netem {emulation}'.format(
-            cmd=cmd, device=device, emulation=emulation)
+        if not device or not cmd_opts:
+            raise netem_exceptions.CommandError('device', 'cmd_opts')
+
+        return r'{cmd} {device} root netem {cmd_opts}'.format(
+            cmd=cmd, device=device, cmd_opts=cmd_opts)
 
     @staticmethod
-    def remove_emulation(device, emulation):
+    def remove_emulation(device, emulations):
         '''
-        :returns: the os command to remove an emulation from a network device
+        :returns: the os command to remove an emulations from a network device
         :rtype: str
 
         :arg str device: the network device name
 
-        :arg str emulation: the netem emulation(s)
+        :arg str emulations: the netem emulations(s)
 
         '''
         cmd = 'sudo tc qdisc del dev'
-        if not device or not emulation:
-            raise netem_exceptions.CommandError('device', 'emulation')
-        return r'{cmd} {device} root netem {emulation}'.format(
-            cmd=cmd, device=device, emulation=emulation)
+        if not device or not emulations:
+            raise netem_exceptions.CommandError('device', 'emulations')
+        return r'{cmd} {device} root netem {emulations}'.format(
+            cmd=cmd, device=device, emulations=emulations)
 
     @staticmethod
     def remove_all_emulations(device):
         '''
-        :returns: the command to remove all emulation from a network device
+        :returns: the command to remove all emulations from a network device
 
         :arg str device:
         '''
@@ -142,7 +139,7 @@ class Command(object):
     @staticmethod
     def show_emulations(device):
         '''
-        :returns: the os command to show the emulation runing on a device
+        :returns: the os command to show the emulations runing on a device
 
         :arg str device:
         '''
@@ -199,12 +196,19 @@ class Command(object):
 def get_logger():
     """
     get a logging objects
+    #TODO: work this, brother. this is waaaay too basic
     """
     logger = logging.getLogger(__name__)
+    logger.setLevel(LOG_LEVEL)
     console = logging.StreamHandler()
-    console.setFormatter('%(asctime)s %(name)s %(levelname)-6s: %(message)s')
+    log = logging.FileHandler('simple_netem.log')
+    formatter = logging.Formatter(
+        '%(asctime)s %(name)s %(levelname)-6s: %(message)s')
+    console.setFormatter(formatter)
     console.setLevel(LOG_LEVEL)
     logger.addHandler(console)
+    log.setFormatter(formatter)
+    logger.addHandler(log)
     return logger
 
 
@@ -241,7 +245,7 @@ class NetemInterface(object):
     """
     class wrapper for the network interface to be controlled
 
-    each interface used for network emulation is exposed via an
+    each interface used for network emulations is exposed via an
     instance of this class
 
     public members
@@ -269,8 +273,8 @@ class NetemInterface(object):
         keep the possible states in their own class
         '''
 
-        ready = dict(ready='UP, no emulation')
-        emulating = dict(emulating='UP, running an emulation')
+        ready = dict(ready='UP, no emulations')
+        emulating = dict(emulating='UP, running an emulations')
         blocking = dict(blocking='DOWN, blocking all traffic')
 
     @staticmethod
@@ -560,296 +564,76 @@ class NetemInterface(object):
 
         return False
 
-    def add_emulations(self, *emulations):
+    def add_netem_options(self, *netem_options):
         '''
-        apply one or more netem disciplines (emulation) to the network
+        apply one or more netem disciplines (netem_options) to the network
         device controlled by this instance
 
-        :arg *default_emulations:
-            use the specified emulation with the default arguments present
-            in the emulation classes
+        :arg *default_netem_options:
+            use the specified netem_options with the default arguments present
+            in the netem_options classes
 
-        :arg **custom_emulations:
-            use emulation with fully (or partially) defined arguments
+        :arg **custom_netem_options:
+            use netem_options with fully (or partially) defined arguments
 
         obviously, a syntax error is raised if there are conflicts between
-        *default_emulations and **emulation
+        *default_netem_options and **netem_options
         '''
-        if not emulations:
-            self.logger.warning(
-                'no emulation arguments present, aborting command')
+        if not netem_options:
+            self.logger.exception(
+                'must specify at least one netem option when adding an'
+                ' emulation')
+            raise netem_exceptions.NetemOptionsError(
+                msg='must specify at least one netem option when adding an'
+                ' emulation')
 
         # *args is a tuple, we want a list because it's meaner
-        emulations = list(emulations)
+        netem_options = list(netem_options)
 
-        for emulation_ in emulations:
-            if not isinstance(emulation_, emulation.Emulation):
-                raise TypeError()
-            if 'emulation' in type(emulation_).__name__.lower():
-                raise TypeError('must not use emulation.Emulation directly')
+        for netem_option in netem_options:
+            if not isinstance(netem_option, emulations.Emulation):
+                msg = 'emulation %s: invalid type %s' % (
+                    netem_option, type(netem_option).__name__)
+                self.logger.exception(msg)
+                raise emulations.EmulationTypeError(
+                    emulation=netem_option, msg=msg)
 
-        emulation.Emulation.has_no_duplicates(emulations=emulations)
+            if 'emulation' in type(netem_option).__name__.lower():
+                msg = 'using %s directly is not allowed' % type(
+                    netem_option).__name__
+                self.logger.exception(msg)
+                raise emulations.EmulationTypeError(
+                    emulation=netem_option, msg=msg)
 
-        if emulation.Emulation.reorder_without_delay(emulations):
-            emulations.append(emulation.Delay())
+        try:
+            emulations.Emulation.has_no_duplicates(netem_options)
+        except emulations.EmulationValueError as err:
+            self.logger.exception(err, exc_info=True)
+            raise err
 
-    # pylint R0912: too many branches
-    # pylint:disable=R0912
+        if emulations.Emulation.has_reorder_without_delay(netem_options):
+            self.logger.info('found reorder option without delay option.'
+                             ' adding default delay option...')
+            netem_options.append(emulations.Delay())
 
-    def add_qdisc_netem(self, limit='', delay='', reorder='', corrupt='',
-                        duplicate='', rate='', loss_random='', loss_state='',
-                        loss_gemodel=''):
-        """
-        apply a netem configuration to the qdisc discipline on this interface
+        try:
+            emulations.Emulation.has_no_multiple_loss_emulations(
+                netem_options)
+        except emulations.EmulationValueError as err:
+            self.logger.exception(err, exc_info=True)
+            raise err
 
-        all the parameters follow these rules:
+        if not emulations.Emulation.has_limit(netem_options):
+            self.logger.info('no limit option was specified.'
+                             ' adding default limit option...')
+            netem_options.append(emulations.Limit())
 
-        *    if it's not a dictionary, don't use this param
-        *    if it's an empty dictionary, use the defaults from the matching
-             Netem*() classes
-        *    if it's a non-empty dictionary, use it as documented
+        self.__execute__(Command.add_emulation(
+            self.interface,
+            ' '.join(
+                [netem_option.emulation for netem_option in netem_options])))
 
-        :param limit:
-            limit netem emulation(s) to $packets, type dictionary;
-            the number of packets in flight that are subject to the netem
-            configuration
-
-            this parameter is irelevant on its own: without any other netem
-            directives what is it that you are limiting the number of packets
-            to?
-
-            this parameter will be applied by the tc qdisc netem command by
-            default as 'limit 1000'; the parameter should be used if the 1000
-            value is undesirable
-
-            format: {'limit': positive_integer_value}
-
-        :param delay:
-            netem delay emulation, type dictionary
-
-            format: {'delay': numeric_positive, # delay
-                     'delay_units': 'msec|msecs|usec|usecs|sec|secs', # time units
-                     'jitter': numeric_positive, # jitter
-                     'correlation': numeric_positive_0_100, # correlation percent
-                     'distribution': 'normal|pareto|paretonormal|uniform',}
-
-        :param reorder:
-            netem reorder ermulation, type dictionary
-
-            this parameter cannot be applied without applying a delay as well
-            if a delay parameter is not already present, a
-            delay={delay:10,delay_units='msec'} is automatically applied
-
-            format: {'percent': numeric_positive_0_100,
-                     'correlation': numeric_positive_0_100,
-                     'gap': positive_integer}
-
-        :param corrupt:
-            netem corrupt emulation
-
-            format: {'percent': numeric_positive_0_100,
-                     'correlation': numeric_positive_0_100,}
-
-        :param duplicate:
-            netem duplicate emulation
-
-            format: {'percent': numeric_positive_0_100,
-                     'correlation': numeric_positive_0_100,}
-
-        :param rate:
-            netem rate control emulation
-
-            note that we are not supporting PACKETOVERHEAD, CELLSIZE, and
-            CELLOVERHEAD
-
-            format: {'rate': positive_numeric,
-                     'units': 'bit|bps|kbit|kbps|mbit|mbps|gbit|gbps'}
-
-        :param loss_random:
-            netem random loss emulation
-
-            this parameter will pre-empt any other loss emulation
-            the correlation attribute is deprecated and its use will raise a
-            warning
-
-            format: {'percent': numeric_positive_0_100,
-                     'correlation': numeric_positive_0_100,}
-
-        :param loss_gemodel:
-            netem loss emulation using the Gilbert-Elliot model
-
-            this parameter will pre-empt loss state based emulation; this
-            parameter is pre-empted by loss random
-            this parameter is not properly supported by some iproute2 versions
-
-            format: {'p': numeric_positive_0_100,
-                     'r': numeric_positive_0_100,
-                     'one_h': numeric_positive_0_100,
-                     'one_k': numeric_positive_0_100,}
-
-        :param loss_state:
-            netem loss emulation using a 4 state Markhov model
-
-            this parameter will pre-empted by both random loss emulation and
-            Gilbert-Elliot model loss emulation
-
-            format: {'p13': numeric_positive_0_100,
-                     'p31': numeric_positive_0_100,
-                     'p32': numeric_positive_0_100,
-                     'p23': numeric_positive_0_100,
-                     'p14': numeric_positive_0_100,}
-
-        :returns:
-            a tuple (0|1, status_message)
-
-            0: emulation applied succesfully, status_message: stdout from the
-            tc command execution if any
-
-            1: emulation command failed, status_message: stderr from the tc
-            command execution if any
-
-        :raises:
-            NetemConfig Exception
-
-        """
-
-        # first, remove any previous netem configuration
-        self.remove_emulations()
-
-        self.logger.debug('''preparing add netem comand''')
-        cmd_root = '{} {} root netem'.format(netem_add, self.interface)
-        cmd = cmd_root
-        self.logger.debug(cmd)
-
-        if isinstance(delay, dict):
-            cmd = '{} {}'.format(cmd, emulation.Delay(**delay).emulation)
-            self.logger.debug(cmd)
-        else:
-            if delay:
-                raise netem_exceptions.NetemConfigException(
-                    bad_parm='delay',
-                    bad_val=delay,
-                    accepts='must be a dictionary'
-                )
-
-        if isinstance(reorder, dict):
-            # reorder also needs delay
-            if 'delay' not in cmd:
-                cmd = '{} {}'.format(cmd, emulation.Delay(
-                    delay=10).emulation)
-            cmd = '{} {}'.format(
-                cmd, emulation.Reorder(**reorder).emulation)
-            self.logger.debug(cmd)
-        else:
-            if reorder:
-                raise netem_exceptions.NetemConfigException(
-                    bad_parm='reorder',
-                    bad_val=reorder,
-                    accepts='must be a dictionary'
-                )
-
-        if isinstance(corrupt, dict):
-            cmd = '{} {}'.format(
-                cmd, emulation.Corrupt(**corrupt).emulation)
-            self.logger.debug(cmd)
-        else:
-            if corrupt:
-                raise netem_exceptions.NetemConfigException(
-                    bad_parm='corrupt',
-                    bad_val=corrupt,
-                    accepts='must be a dictionary'
-                )
-
-        if isinstance(duplicate, dict):
-            cmd = '{} {}'.format(
-                cmd, emulation.Duplicate(**duplicate).emulation)
-            self.logger.debug(cmd)
-        else:
-            if duplicate:
-                raise netem_exceptions.NetemConfigException(
-                    bad_parm='duplicate',
-                    bad_val=duplicate,
-                    accepts='must be a dictionary'
-                )
-
-        if isinstance(rate, dict):
-            cmd = '{} {}'.format(cmd, emulation.Rate(**rate).emulation)
-            self.logger.debug(cmd)
-        else:
-            if rate:
-                raise netem_exceptions.NetemConfigException(
-                    bad_parm='rate',
-                    bad_val=rate,
-                    accepts='must be a dictionary'
-                )
-
-        # random loss takes priority over loss state and loss gemodel
-        if isinstance(loss_random, dict):
-            loss_gemodel = ''
-            loss_state = ''
-            cmd = '{} {}'.format(
-                cmd, emulation.LossRandom(**loss_random).emulation
-            )
-            self.logger.debug(cmd)
-        else:
-            if loss_random:
-                raise netem_exceptions.NetemConfigException(
-                    bad_parm='loss_random',
-                    bad_val=loss_random,
-                    accepts='must be a dictionary'
-                )
-
-        # loss gemodel takes precedence over loss state
-        if isinstance(loss_gemodel, dict):
-            loss_state = ''
-            cmd = '{} {}'.format(
-                cmd, emulation.LossGemodel(**loss_gemodel).emulation
-            )
-            self.logger.debug(cmd)
-        else:
-            if loss_gemodel:
-                raise netem_exceptions.NetemConfigException(
-                    bad_parm='loss_gemodel',
-                    bad_val=loss_gemodel,
-                    accepts='must be a dictionary'
-                )
-
-        if isinstance(loss_state, dict):
-            cmd = '{} {}'.format(
-                cmd, emulation.LossState(**loss_state).emulation)
-        else:
-            if loss_state:
-                raise netem_exceptions.NetemConfigException(
-                    bad_parm='loss_state',
-                    bad_val=loss_state,
-                    accepts='must be a dictionary'
-                )
-
-        if isinstance(limit, dict):
-            # limit only makes sense if other emulation are applied
-            if len(cmd) > len(cmd_root):
-                cmd = '{} {}'.format(cmd, emulation.Limit(**limit).emulation)
-                self.logger.debug(cmd)
-            else:
-                msg = 'bare limit=%s emulation, ignoring' % limit
-                warnings.warn(msg)
-                self.logger.warning(msg)
-                return 1, msg
-        else:
-            if limit:
-                raise netem_exceptions.NetemConfigException(
-                    bad_parm='limit',
-                    bad_val=limit,
-                    accepts='must be a dictionary'
-                )
-
-        ret, out = self.__execute__(cmd)
-        if not ret:
-            self.state = 'emulating'
-
-        self.iface_stats = dict(iface_stat=self.interface_info(),
-                                netem_stat=self.emulation_info())
-        return ret, out
+        self.state = self.State.emulating
 
     def remove_emulations(self):
         """
@@ -862,15 +646,15 @@ class NetemInterface(object):
             self.__execute__(Command.remove_all_emulations(self.interface))
 
         self.state = self.State.ready
-        self.logger.info('no emulation for %s on %s' % (self.side,
-                                                        self.interface))
+        self.logger.info('no emulations for %s on %s' % (self.side,
+                                                         self.interface))
 
     def remove_emulation(self):
         '''
-        remove a single emulation
+        remove a single emulations
 
         :raises: :exception:`<NotImplementedError>`
         '''
         raise NotImplementedError(
             'please use self.remove_all_emulations() and then re-apply'
-            ' any desired emulation')
+            ' any desired emulations')
