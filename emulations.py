@@ -99,7 +99,7 @@ class EmulationTypeError(TypeError):
     invalid argument
     '''
 
-    def __init__(self, emulation, arg, msg=None):
+    def __init__(self, emulation=None, arg=None, msg=None):
         '''
         :arg string emulation:
             the value of the :class:`<Emulation>` emulation member
@@ -111,7 +111,8 @@ class EmulationTypeError(TypeError):
         '''
         if msg is None:
             msg = 'argument error in {}: expecting {} {}'.format(
-                arg, emulation, msg)
+                arg or 'unspecified argument',
+                emulation or 'unspecified emulation', msg)
         super(EmulationTypeError, self).__init__(msg)
         self.emulation = emulation
         self.arg = arg
@@ -231,6 +232,10 @@ class Emulation(object):
             [True for emulation in emulations if isinstance(
                 emulation, (LossRandom, LossState, LossGemodel))]
         )
+
+        if not loss_counter:
+            # no loss emulations, go away
+            return True
 
         if loss_counter.get(True) > 1:
             value = ', '.join([key.__name__ for key in loss_counter.keys()])
