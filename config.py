@@ -45,6 +45,8 @@ def get_logger(name, log_file=LOG, log_level=LOG_LEVEL):
     '''
     :returns: a logger object
     '''
+    # pylint:disable=C0301
+    # C0301: line too long
     log_config = {
         'version': 1,
         'propagate': True,
@@ -52,9 +54,11 @@ def get_logger(name, log_file=LOG, log_level=LOG_LEVEL):
         'formatters': {
             'verbose': {
                 'format':
-                '%(levelname)s %(asctime)s %(module)s %(process)d %(thread)d %(message)s'
+                '%(asctime)s %(levelname)s %(module)s, line %(lineno)d (%(process)d %(thread)d): %(message)s'
             },
-            'simple': {'format': '%(levelname)s %(message)s'},
+            'simple': {
+                'format':
+                '%(relativeCreated)d %(levelname)s %(module)s, line %(lineno)d: %(message)s'},
         },
         'handlers': {
             'file': {'level': log_level,
@@ -65,13 +69,14 @@ def get_logger(name, log_file=LOG, log_level=LOG_LEVEL):
                      'formatter': 'verbose'},
             'console': {'level': log_level,
                         'class': 'logging.StreamHandler',
-                        'formatter': 'simple'
-                        },
+                        'formatter': 'simple'},
         },
         'loggers': {
-            'netem': {'handlers': ['console', 'file'], }
+            'netem': {'handlers': ['console', 'file'], },
+            'pyro_netem': {'handlers': ['console', 'file'], }
         }
     }
+    # pylint:enable=C0301
 
     logging.config.dictConfig(log_config)
     logger = logging.getLogger(name)
