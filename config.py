@@ -40,6 +40,16 @@ LOG = os.path.join(LOGS, 'netem.log')
 
 LOG_LEVEL = logging.DEBUG
 
+XCLUDE_WLAN = True
+'''
+:var bool XCLUDE_WLAN: default configuration for not using WLAN devices
+'''
+
+XCLUDE_LOOPBACK = True
+'''
+:var bool XCLUDE_LOOPBACK: default configuration for not using loopback devices
+'''
+
 
 def get_logger(name, log_file=LOG, log_level=LOG_LEVEL):
     '''

@@ -255,7 +255,8 @@ class NetemInterface(object):
         blocking = dict(blocking='DOWN, blocking all traffic')
 
     @staticmethod
-    def get_interfaces(xclude_wlan=True, xclude_loopback=True):
+    def get_interfaces(xclude_wlan=config.XCLUDE_WLAN,
+                       xclude_loopback=config.XCLUDE_LOOPBACK):
         """
         get a list of network interface names from the system
 
