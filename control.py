@@ -1,3 +1,4 @@
+# pylint:disable=C0301
 """
 .. _simple_netem_control:
 
@@ -61,6 +62,7 @@ per flow emulations.
     on a Linux host
 
 """
+# pylint:enable=C0301
 from __future__ import (
     unicode_literals, print_function, division, absolute_import)
 
@@ -102,7 +104,7 @@ class Command(object):
             cmd=cmd, device=device, cmd_opts=cmd_opts)
 
     @staticmethod
-    def remove_emulation(device, emulations):
+    def remove_emulation(device=None, cmd_opts=None):
         '''
         :returns: the os command to remove an emulations from a network device
         :rtype: str
@@ -113,10 +115,10 @@ class Command(object):
 
         '''
         cmd = 'sudo tc qdisc del dev'
-        if not device or not emulations:
+        if not device or not cmd_opts:
             raise netem_exceptions.CommandError('device', 'emulations')
         return r'{cmd} {device} root netem {emulations}'.format(
-            cmd=cmd, device=device, emulations=emulations)
+            cmd=cmd, device=device, emulations=cmd_opts)
 
     @staticmethod
     def remove_all_emulations(device):
@@ -300,7 +302,7 @@ class NetemInterface(object):
 
         return interfaces
 
-    def __init__(self,  interface=None, side=None, logger=None):
+    def __init__(self, interface=None, side=None, logger=None):
         """
         :param side:
             the position of the interface controlled by this instance relative
