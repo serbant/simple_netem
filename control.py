@@ -3,7 +3,7 @@
 
 python wrapper for linux commands that provide basic WAN emulations
 
-:module:     simple_netem_control
+:module:     control
 
 :copyright:
 
@@ -26,8 +26,8 @@ python wrapper for linux commands that provide basic WAN emulations
 Simple Netem Control
 ====================
 
-This module contains python classes that expose network (WAN) emulations control
-functions on linux hosts
+This module contains python classes that expose network (WAN) emulations
+control functions on linux hosts
 
 The linux commands exposed by this module are the **tc** command and the **ip**
 command.
