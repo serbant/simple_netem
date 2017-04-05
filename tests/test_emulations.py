@@ -7,7 +7,7 @@ import pytest
 # modules under test are one directory up, make sure python can find them
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-import emulations   # pylint:disable=F0401,C0413
+import emulations
 
 
 class TestEmulation(object):
