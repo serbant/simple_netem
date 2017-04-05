@@ -68,20 +68,14 @@ from __future__ import (
 import sys
 import subprocess
 import shlex
-import logging
 
 from weakref import WeakSet
 
 import netem_exceptions
 import emulations
+import config
 
 __version__ = '0.0.1'
-
-DEBUG = 1
-if DEBUG:
-    LOG_LEVEL = logging.DEBUG
-else:
-    LOG_LEVEL = logging.WARN
 
 
 class Command(object):
@@ -191,25 +185,6 @@ class Command(object):
         '''
         cmd = 'ip link show'
         return r'{cmd}'.format(cmd=cmd)
-
-
-def get_logger():
-    """
-    get a logging objects
-    #TODO: work this, brother. this is waaaay too basic
-    """
-    logger = logging.getLogger(__name__)
-    logger.setLevel(LOG_LEVEL)
-    console = logging.StreamHandler()
-    log = logging.FileHandler('simple_netem.log')
-    formatter = logging.Formatter(
-        '%(asctime)s %(name)s %(levelname)-6s: %(message)s')
-    console.setFormatter(formatter)
-    console.setLevel(LOG_LEVEL)
-    logger.addHandler(console)
-    log.setFormatter(formatter)
-    logger.addHandler(log)
-    return logger
 
 
 def execute(cmd):
@@ -373,7 +348,7 @@ class NetemInterface(object):
 
         self.interface = interface
         self.side = side or self.interface
-        self.logger = logger or get_logger()
+        self.logger = logger or config.get_logger('netem')
 
         interfaces = self.get_interfaces()
 
@@ -395,8 +370,8 @@ class NetemInterface(object):
         self.state = self.State.ready
 
         self.logger.info(
-            'netem control server running for %s on %s' % (self.side,
-                                                           self.interface))
+            'netem control server running as %s on network interface %s' %
+            (self.side, self.interface))
 
     def __new__(cls, interface, side=None, *args, **kwargs):
         """
@@ -505,10 +480,10 @@ class NetemInterface(object):
         self.logger.debug('executing %s' % cmd)
         ret, out, error = execute(cmd)
         if ret:
-            self.logger.error('returned error %s' % error)
+            self.logger.error('stderr: %s' % error)
             raise netem_exceptions.NetemCommandError(cmd, error)
 
-        self.logger.debug('ok, returned %s' % out)
+        self.logger.debug('stdout: %s' % out)
         return out
 
     @property
@@ -646,8 +621,8 @@ class NetemInterface(object):
             self.__execute__(Command.remove_all_emulations(self.interface))
 
         self.state = self.State.ready
-        self.logger.info('no emulations for %s on %s' % (self.side,
-                                                         self.interface))
+        self.logger.info(
+            'no emulations running on network device %s' % self.interface)
 
     def remove_emulation(self):
         '''
