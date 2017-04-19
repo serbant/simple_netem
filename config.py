@@ -29,6 +29,26 @@ import os
 import logging
 import logging.config
 
+
+##############################################################################
+# startup
+##############################################################################
+DESCRIPTION = '''
+exposes network device commands via a Pyro4 RPC server.
+ UP, DOWN, LIST, SHOW and netem emulation commands are available
+'''
+EPILOG = '''
+Copyright 2017 Serban Teodorescu.
+ Licensed under the Apache License, Version 2.0
+'''
+HOST = 'localhost'
+PORT = 21499
+LOG_LEVELS = ['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG']
+DEFAULT_LOG_LEVEL = 'INFO'
+
+##############################################################################
+# logging
+##############################################################################
 LOGS = 'logs'
 '''
 :var str LOGS: the directory path for the log files
@@ -40,23 +60,11 @@ LOG = os.path.join(LOGS, 'netem.log')
 
 LOG_LEVEL = logging.DEBUG
 
-XCLUDE_WLAN = True
-'''
-:var bool XCLUDE_WLAN: default configuration for not using WLAN devices
-'''
-
-XCLUDE_LOOPBACK = True
-'''
-:var bool XCLUDE_LOOPBACK: default configuration for not using loopback devices
-'''
-
 
 def get_logger(name, log_file=LOG, log_level=LOG_LEVEL):
     '''
     :returns: a logger object
     '''
-    # pylint:disable=C0301
-    # C0301: line too long
     log_config = {
         'version': 1,
         'propagate': True,
@@ -64,11 +72,12 @@ def get_logger(name, log_file=LOG, log_level=LOG_LEVEL):
         'formatters': {
             'verbose': {
                 'format':
-                '%(asctime)s %(levelname)s %(module)s, line %(lineno)d (%(process)d %(thread)d): %(message)s'
-            },
+                '%(asctime)s %(levelname)s %(module)s, line %(lineno)d'
+                ' (%(process)d %(thread)d): %(message)s'},
             'simple': {
                 'format':
-                '%(relativeCreated)d %(levelname)s %(module)s, line %(lineno)d: %(message)s'},
+                '%(relativeCreated)d %(levelname)s %(module)s,'
+                ' line %(lineno)d: %(message)s'},
         },
         'handlers': {
             'file': {'level': log_level,
@@ -93,3 +102,17 @@ def get_logger(name, log_file=LOG, log_level=LOG_LEVEL):
     logger.setLevel(log_level)
 
     return logger
+
+
+##############################################################################
+# netem control defaults
+##############################################################################
+XCLUDE_WLAN = True
+'''
+:var bool XCLUDE_WLAN: default configuration for not using WLAN devices
+'''
+
+XCLUDE_LOOPBACK = True
+'''
+:var bool XCLUDE_LOOPBACK: default configuration for not using loopback devices
+'''
