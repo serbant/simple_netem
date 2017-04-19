@@ -1,9 +1,9 @@
 '''
-.. _simple_netem_settings:
+.. _simple_netem_config:
 
 settings module for the simple_netem package
 
-:module:     settings
+:module:     config
 
 :copyright:
 
