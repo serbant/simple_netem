@@ -351,7 +351,7 @@ class NetemInterface(object):
 
         self.interface = interface
         self.side = side or self.interface
-        self.logger = logger or config.get_logger('netem')
+        self.logger = logger or config.get_logger('local_netem')
 
         interfaces = self.get_interfaces()
 

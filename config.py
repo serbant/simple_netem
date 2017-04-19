@@ -91,8 +91,8 @@ def get_logger(name, log_file=LOG, log_level=LOG_LEVEL):
                         'formatter': 'simple'},
         },
         'loggers': {
-            'netem': {'handlers': ['console', 'file'], },
-            'pyro_netem': {'handlers': ['console', 'file'], }
+            'local_netem': {'handlers': ['console', 'file'], },
+            'pyro4_netem': {'handlers': ['console', 'file'], }
         }
     }
     # pylint:enable=C0301
