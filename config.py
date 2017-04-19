@@ -53,18 +53,19 @@ LOGS = 'logs'
 '''
 :var str LOGS: the directory path for the log files
 '''
-if not os.path.isdir(LOGS):
-    os.makedirs(LOGS)
 
-LOG = os.path.join(LOGS, 'netem.log')
-
-LOG_LEVEL = logging.DEBUG
+LOG = 'netem.log'
 
 
-def get_logger(name, log_file=LOG, log_level=LOG_LEVEL):
+def get_logger(name, log_path=LOGS, log_name=LOG, log_level=logging.DEBUG):
     '''
     :returns: a logger object
     '''
+    if not os.path.isdir(log_path):
+        os.makedirs(log_path)
+
+    log_file = os.path.join(log_path, log_name)
+
     log_config = {
         'version': 1,
         'propagate': True,
