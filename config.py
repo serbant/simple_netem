@@ -117,3 +117,9 @@ XCLUDE_LOOPBACK = True
 '''
 :var bool XCLUDE_LOOPBACK: default configuration for not using loopback devices
 '''
+
+##############################################################################
+# Pyro4 settings
+##############################################################################
+P4_SERVERTYPE = 'MULTIPLEX'
+P4_HMAC = 'buona fortuna, donna lucia!'
