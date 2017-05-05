@@ -1,7 +1,7 @@
 '''
 .. _simple_netem_daemon:
 
-daemonizer module for the simple_netem package
+serve_pyro4r module for the simple_netem package
 
 :module:     daemon
 
@@ -33,15 +33,12 @@ import sys
 import copy
 import logging
 import argparse
-import Pyro4
 
 import config
 
 from control import NetemInterface
 
 __version__ = '0.0.1'
-
-Pyro4.config.SERVERTYPE = 'multiplex'
 
 
 def main(argv=None):
@@ -55,19 +52,22 @@ def main(argv=None):
         sys.argv.extend(argv)
 
     _args = _get_args()
-    daemonize(p4_args=_args)
+    serve_pyro4(p4_args=_args)
 
 
-def daemonize(p4_args):
+def serve_pyro4(p4_args):
     '''
-    start a Pyro4 instance that exposes a :class:`,NetemInterface>` instance
+    start a Pyro4 server that exposes a :class:`,NetemInterface>` instance
     for each interface definition present in the command line arguments
     '''
+    import Pyro4
+    Pyro4.config.SERVERTYPE = config.P4_SERVERTYPE
+
     netem_interfaces = []
     if not isinstance(p4_args, _Args):
         raise TypeError('invalid arguments %s' % p4_args)
 
-    p4_args.logger.info('starting simple_netem daemon...')
+    p4_args.logger.info('starting simple_netem Pyro4 daemon...')
 
     if p4_args.name_server:
         p4_args.logger.error(
@@ -81,11 +81,14 @@ def daemonize(p4_args):
                                      side=interface[1], logger=p4_args.logger))
 
     with Pyro4.Daemon(host=p4_args.server, port=p4_args.port) as p4_daemon:
+        p4_daemon._pyroHmacKey = config.P4_HMAC  # pylint:disable=W0212
         for netem_interface in netem_interfaces:
             uri = p4_daemon.register(
                 netem_interface, objectId=netem_interface.interface)
-            p4_args.logger.info('netem interface control running on %s' % uri)
+            p4_args.logger.info('Pyro4 URI for interface %s: %s' % (
+                netem_interface.interface, uri))
 
+        p4_args.logger.info('simple_netem Pyro4 daemon running...')
         p4_daemon.requestLoop()
 
 
