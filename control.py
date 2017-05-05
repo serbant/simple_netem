@@ -376,7 +376,7 @@ class NetemInterface(object):
             'netem control server running as %s on network interface %s' %
             (self.side, self.interface))
 
-    def __new__(cls, interface, side=None, *args, **kwargs):
+    def __new__(cls, interface, side=None, logger=None, *args, **kwargs):
         """
         there are some restrictions on how instances of the
         :classL`<NetemInterface>` are constructed, namely:
