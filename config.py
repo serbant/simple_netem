@@ -122,4 +122,4 @@ XCLUDE_LOOPBACK = True
 # Pyro4 settings
 ##############################################################################
 P4_SERVERTYPE = 'MULTIPLEX'
-P4_HMAC = 'buona fortuna, donna lucia!'
+P4_HMAC = b'buona fortuna, donna lucia!'
