@@ -157,8 +157,7 @@ class Emulation(object):
         it uses the collections.Counter() function to retrieve the number of
         times a specific emulation type shows up.
         it will then iterate through the resulting dictionary style object and
-        remove all singletons. if there's anything left after that, we have
-        duplicates and we complain
+        retrieve all duplicates. if there are no duplicates, we're good
 
         :arg list emulations: list of :class:`<Emulation>` children
 
@@ -168,7 +167,7 @@ class Emulation(object):
 
         dupes_counter = dict()
         for key, val in type_counter.items():
-            # pop anything that shows more than once
+            # look, a dupe; go get it, boy
             if val > 1:
                 dupes_counter[key] = val
 
