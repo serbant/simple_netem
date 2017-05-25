@@ -586,7 +586,7 @@ class LossState(Emulation):
             # this one is mandatory
             raise EmulationTypeError(
                 emulation=self.emulation, arg='None',
-                message='p_13 is a mandatory argument')
+                msg='p_13 is a mandatory argument')
 
         self.validate_and_add(p_13, p_31, p_23, p_32, p_14)
 
@@ -690,7 +690,7 @@ class LossGemodel(Emulation):
             # this one is mandatory
             raise EmulationTypeError(
                 emulation=self.emulation, arg='None',
-                message='p is a mandatory argument')
+                msg='p is a mandatory argument')
 
         self.validate_and_add(p, r, one_h, one_k)
 
@@ -807,7 +807,7 @@ class Reorder(Emulation):
             # this one is mandatory
             raise EmulationTypeError(
                 emulation=self.emulation, arg='None',
-                message='percent is a mandatory argument')
+                msg='percent is a mandatory argument')
 
         self.validate_and_add(percent, correlation)
 
@@ -851,7 +851,7 @@ class Duplicate(Emulation):
             # this one is mandatory
             raise EmulationTypeError(
                 emulation=self.emulation, arg='None',
-                message='percent is a mandatory argument')
+                msg='percent is a mandatory argument')
 
         self.validate_and_add(percent, correlation)
 
@@ -886,7 +886,7 @@ class Corrupt(Emulation):
             # this one is mandatory
             raise EmulationTypeError(
                 emulation=self.emulation, arg='None',
-                message='percent is a mandatory argument')
+                msg='percent is a mandatory argument')
 
         self.validate_and_add(percent, correlation)
 
@@ -924,7 +924,7 @@ class Limit(Emulation):
             # this one is mandatory
             raise EmulationTypeError(
                 emulation=self.emulation, arg='None',
-                message='limit is a mandatory argument')
+                msg='limit is a mandatory argument')
 
         self.validate_and_add(limit, lt_100=False, integer=True)
 
@@ -1018,7 +1018,7 @@ class Delay(Emulation):
             # this one is mandatory
             raise EmulationTypeError(
                 emulation=self.emulation, arg='None',
-                message='delay is a mandatory argument')
+                msg='delay is a mandatory argument')
 
         self.validate_and_add(
             delay, jitter,
@@ -1031,7 +1031,7 @@ class Delay(Emulation):
             if distribution not in self._distributions:
                 raise EmulationTypeError(
                     emulation=self.emulation, arg='None',
-                    message='distribution must be one of %s'
+                    msg='distribution must be one of %s'
                     % ', '.join(self._distributions))
 
             self.emulation = '{} {}'.format(self.emulation, distribution)
