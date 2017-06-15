@@ -1034,6 +1034,7 @@ class Delay(Emulation):
                     msg='distribution must be one of %s'
                     % ', '.join(self._distributions))
 
-            self.emulation = '{} {}'.format(self.emulation, distribution)
+            self.emulation = '{} distribution {}'.format(
+                self.emulation, distribution)
 
 # pylint:enable=R0903
