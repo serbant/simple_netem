@@ -38,8 +38,15 @@ __version__ = '0.0.1'
 
 
 class P4NetemClient(object):
+    '''
+    client class using the Pyro4 protocol
+    '''
 
     def __init__(self, p4_uri=None):
+        '''
+        :arg str p4_uri: the PYRO URI used to connect to the netem control
+        daemon
+        '''
         Pyro4.config.SERIALIZER = 'pickle'
         with Pyro4.Proxy(p4_uri) as p4_client:
             p4_client._pyroHmacKey = config.P4_HMAC
