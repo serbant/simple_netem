@@ -370,11 +370,18 @@ class NetemInterface(object):
         self.remove_emulations()
         self.set_interface_up()
 
-        self.state = self.State.ready
+        self._state = '{}: {}'.format(self.interface, self.State.ready)
 
         self.logger.info(
             'netem control server running as %s on network interface %s' %
             (self.side, self.interface))
+
+    @property
+    def state(self):
+        '''
+        state property getter
+        '''
+        return self._state
 
     def __new__(cls, interface, side=None, logger=None, *args, **kwargs):
         """
@@ -610,8 +617,8 @@ class NetemInterface(object):
             self.interface,
             ' '.join(
                 [netem_option.emulation for netem_option in netem_options])))
-
-        self.state = self.State.emulating
+        self._state = self.State.emulating
+        return self.state
 
     def remove_emulations(self):
         """
