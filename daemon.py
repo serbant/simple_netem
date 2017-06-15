@@ -59,9 +59,15 @@ def serve_pyro4(p4_args):
     '''
     start a Pyro4 server that exposes a :class:`,NetemInterface>` instance
     for each interface definition present in the command line arguments
+
+    need to convince Pyro4 to use pickle for serialization; otherwise we
+    won't be able to pass emulation objects directly on the client side. yes,
+    that is not secure but then this  entire package is not secure to begin
+    with
     '''
     import Pyro4
     Pyro4.config.SERVERTYPE = config.P4_SERVERTYPE
+    Pyro4.config.SERIALIZERS_ACCEPTED.add('pickle')
 
     netem_interfaces = []
     if not isinstance(p4_args, _Args):
