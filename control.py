@@ -250,9 +250,9 @@ class NetemInterface(object):
         keep the possible states in their own class
         '''
 
-        ready = dict(ready='UP, no emulations')
-        emulating = dict(emulating='UP, running an emulations')
-        blocking = dict(blocking='DOWN, blocking all traffic')
+        ready = 'UP, ready'
+        emulating = 'UP, emulating'
+        blocking = 'DOWN, blocking'
 
     @staticmethod
     def get_interfaces(xclude_wlan=config.XCLUDE_WLAN,
@@ -380,8 +380,49 @@ class NetemInterface(object):
     def state(self):
         '''
         state property getter
+
+        :returns: the state of the interface prefixed by the interface name
+        :rtype: str
         '''
         return self._state
+
+    @property
+    def ready(self):
+        '''
+        :returns:
+            ``True`` if the interface is passing traffic and there are no
+            active emulations
+
+        :rtype: bool
+        '''
+        if self.State.ready in self._state:
+            return True
+        return False
+
+    @property
+    def emulating(self):
+        '''
+        :returns:
+            ``True`` if the interface is passing traffic and there are one or
+            more active emulations
+
+        :rtype: bool
+        '''
+        if self.State.emulating in self._state:
+            return True
+        return False
+
+    @property
+    def blocking(self):
+        '''
+        :returns:
+            ``True`` if the interface is blocking traffic (DOWN)
+
+        :rtype: bool
+        '''
+        if self.State.blocking in self._state:
+            return True
+        return False
 
     def __new__(cls, interface, side=None, logger=None, *args, **kwargs):
         """
@@ -526,6 +567,7 @@ class NetemInterface(object):
         """
         if not self.is_interface_up:
             self.__execute__(Command.ifup(self.interface))
+            self._state = '{}: {}'.format(self.interface, self.State.ready)
 
         self.logger.info('interface state: %s' % self.interface_info)
 
@@ -535,8 +577,8 @@ class NetemInterface(object):
         """
         if self.is_interface_up:
             self.__execute__(Command.ifdown(self.interface))
+            self._state = '{}: {}'.format(self.interface, self.State.blocking)
 
-        self.state = self.State.blocking
         self.logger.info('interface state: %s' % self.interface_info)
 
     @property
@@ -617,7 +659,7 @@ class NetemInterface(object):
             self.interface,
             ' '.join(
                 [netem_option.emulation for netem_option in netem_options])))
-        self._state = self.State.emulating
+        self._state = '{}: {}'.format(self.interface, self.State.emulating)
         return self.state
 
     def remove_emulations(self):
@@ -629,10 +671,11 @@ class NetemInterface(object):
         """
         if self.is_emulating:
             self.__execute__(Command.remove_all_emulations(self.interface))
+            self._state = '{}: {}'.format(self.interface, self.State.ready)
 
-        self.state = self.State.ready
         self.logger.info(
             'no emulations running on network device %s' % self.interface)
+        return self.state
 
     def remove_emulation(self):
         '''
