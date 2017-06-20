@@ -122,4 +122,20 @@ XCLUDE_LOOPBACK = True
 # Pyro4 settings
 ##############################################################################
 P4_SERVERTYPE = 'multiplex'
+'''
+:var P4_SERVERTYPE: Pyro4.config.SERVERTYPE value
+
+    default is threaded but we want multiplexed
+'''
+
 P4_HMAC = b'buona fortuna, donna lucia!'
+'''
+:var P4_HMAC: Pyro4 require an HMAC key to communicate across the network
+
+    note that there security concerns when hard coding the key like above
+'''
+
+P4_PICKLE = 'pickle'
+'''
+:var P4_PICKLE: the serilaizer to use in Pyro4 for complex, unsafe objects
+'''
