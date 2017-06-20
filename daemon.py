@@ -33,6 +33,8 @@ import sys
 import copy
 import logging
 import argparse
+import Pyro4
+import Pyro4.naming
 
 import config
 
@@ -55,6 +57,23 @@ def main(argv=None):
     serve_pyro4(p4_args=_args)
 
 
+def configure_pyro4():
+    '''
+    the Pyro4 settings required by this program are not the defaults
+
+    we must use a multiplexed server because we are accessing fixed, shared
+    resources.
+
+    we need to use a serializer that accepts Python class types so that we can
+    pass emulation objects from the client side to the server side. Pyro4
+    considers such serializers as not secure and will not expose them unless
+    so configured. there are 2 such serializers available: dill and pickle.
+
+    '''
+    Pyro4.config.SERVERTYPE = config.P4_SERVERTYPE
+    Pyro4.config.SERIALIZERS_ACCEPTED.add('pickle')
+
+
 def serve_pyro4(p4_args):
     '''
     start a Pyro4 server that exposes a :class:`,NetemInterface>` instance
@@ -65,9 +84,7 @@ def serve_pyro4(p4_args):
     that is not secure but then this  entire package is not secure to begin
     with
     '''
-    import Pyro4
-    Pyro4.config.SERVERTYPE = config.P4_SERVERTYPE
-    Pyro4.config.SERIALIZERS_ACCEPTED.add('pickle')
+    configure_pyro4()
 
     netem_interfaces = []
     if not isinstance(p4_args, _Args):
@@ -252,8 +269,13 @@ def _get_args(description=config.DESCRIPTION, epilog=config.EPILOG):
         '-o', '--log-directory', dest='log_directory', action='store',
         default=config.LOGS, help='the directory to store log files')
     parser.add_argument(
-        '-n', '--name-server', dest='name_server', action='store_true',
+        '-r', '--register-with-name-server', dest='name_server',
+        action='store_true',
         help='register the Pyro4 URL(s) with a name server')
+    parser.add_argument(
+        '-n', '--start-name-server', dest='start_name_server',
+        action='store_true',
+        help='launch a Pyro4 name server if one cannot be found')
 
     args_as_dict = vars(parser.parse_args())
     return _Args(args_as_dict)
