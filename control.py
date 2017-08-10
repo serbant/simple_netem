@@ -253,6 +253,7 @@ class NetemInterface(object):
         ready = 'UP, ready'
         emulating = 'UP, emulating'
         blocking = 'DOWN, blocking'
+        starting = 'starting'
 
     @staticmethod
     def get_interfaces(xclude_wlan=config.XCLUDE_WLAN,
@@ -365,6 +366,7 @@ class NetemInterface(object):
             raise netem_exceptions.NetemInvalidInterface(
                 self.interface, interfaces.keys())
 
+        self._state = '{}: {}'.format(self.interface, self.State.starting)
         # and we're good to go
         # but let's make sure there's no qdisc already running on this thing
         self.remove_emulations()
@@ -660,7 +662,6 @@ class NetemInterface(object):
             ' '.join(
                 [netem_option.emulation for netem_option in netem_options])))
         self._state = '{}: {}'.format(self.interface, self.State.emulating)
-        return self.state
 
     def remove_emulations(self):
         """
@@ -675,7 +676,6 @@ class NetemInterface(object):
 
         self.logger.info(
             'no emulations running on network device %s' % self.interface)
-        return self.state
 
     def remove_emulation(self):
         '''
