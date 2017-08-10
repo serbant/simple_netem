@@ -74,6 +74,44 @@ def configure_pyro4():
     Pyro4.config.SERIALIZERS_ACCEPTED.add('pickle')
 
 
+def _locate_pyro4_ns(p4_args):
+    '''
+    locate a Pyro4 naming server if so specified in the start-up arguments
+
+    if there is a Pyro4 naming server running on this subnet, then return a
+    proxy for it.
+
+    note that this function as written and invoked in this module can only
+    locate name servers that accept the serializer specified in the config
+    module. by default the pyro4 name server (pyro4-ns) doesn't accept
+    the insecure serializers required by this module.
+
+    to start a stand-alone pyro4 nameserver that can be used by this module,
+    execute:
+
+        export PYRO_SERIALIZERS_ACCEPTED=the_P4_PICKLE_config_value
+        pyro4-ns -n host [-p port] -k the_P4_HMAC_config_value
+
+    where host must be resolvable host name or IP address
+
+    :arg p4_args: the arguments used to start the daemon
+    :type p4_args: :class:`<_Args>`
+
+    :returns: a pyro4 proxy for the name server or None
+    :rtype: :class:`<Pyro4.core.Proxy>`
+
+    '''
+    p4_args.logger.debug('looking for external name server')
+    try:
+        name_server = Pyro4.locateNS()
+        p4_args.logger.debug('found name server %s' % name_server)
+    except Pyro4.errors.NamingError as err:
+        p4_args.logger.debug('...not found, error %s' % err)
+        name_server = None
+
+    return name_server
+
+
 def serve_pyro4(p4_args):
     '''
     start a Pyro4 server that exposes a :class:`,NetemInterface>` instance
