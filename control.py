@@ -77,8 +77,6 @@ import netem_exceptions
 import emulations
 import config
 
-__version__ = '0.0.1'
-
 
 class Command(object):
     '''

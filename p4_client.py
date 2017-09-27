@@ -34,8 +34,6 @@ import Pyro4
 import config
 import emulations
 
-__version__ = '0.0.1'
-
 
 class P4NetemClient(object):
     '''

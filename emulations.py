@@ -71,8 +71,6 @@ import six
 from collections import Counter
 
 
-__version__ = '0.0.1'
-
 SCANF_MEASUREMENT = re.compile(
     r'''(                      # group match like scanf() token %e, %E, %f, %g
     [-+]?                      # +/- or nothing for positive

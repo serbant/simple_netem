@@ -40,8 +40,6 @@ import config
 
 from control import NetemInterface
 
-__version__ = '0.0.1'
-
 
 def main(argv=None):
     '''
@@ -89,7 +87,7 @@ def _locate_pyro4_ns(p4_args):
     to start a stand-alone pyro4 nameserver that can be used by this module,
     execute:
 
-        export PYRO_SERIALIZERS_ACCEPTED=the_P4_PICKLE_config_value
+        export PYRO_SERIALIZERS_ACCEPTED= export PYRO_SERIALIZERS_ACCEPTED=serpent,json,marshal,the_P4_PICKLE_config_value
         pyro4-ns -n host [-p port] -k the_P4_HMAC_config_value
 
     where host must be resolvable host name or IP address
@@ -100,10 +98,13 @@ def _locate_pyro4_ns(p4_args):
     :returns: a pyro4 proxy for the name server or None
     :rtype: :class:`<Pyro4.core.Proxy>`
 
+    #TODO: figure out a way to check the registration and handle problems
+        with serializers. hmmm, quickie server with one of the emulation
+        classes and try to register it and then list the methods?
     '''
     p4_args.logger.debug('looking for external name server')
     try:
-        name_server = Pyro4.locateNS()
+        name_server = Pyro4.locateNS(hmac_key=config.P4_HMAC)
         p4_args.logger.debug('found name server %s' % name_server)
     except Pyro4.errors.NamingError as err:
         p4_args.logger.debug('...not found, error %s' % err)
@@ -131,8 +132,7 @@ def serve_pyro4(p4_args):
     p4_args.logger.info('starting simple_netem Pyro4 daemon...')
 
     if p4_args.name_server:
-        p4_args.logger.error(
-            'Pyro4 name server integration not yet implemented')
+        name_server = _locate_pyro4_ns(p4_args)
 
     p4_netem_interface_class = Pyro4.expose(NetemInterface)
 
@@ -148,6 +148,13 @@ def serve_pyro4(p4_args):
                 netem_interface, objectId=netem_interface.interface)
             p4_args.logger.info('Pyro4 URI for interface %s: %s' % (
                 netem_interface.interface, uri))
+
+            if name_server:
+                p4_args.logger.debug('registering with name server')
+                try:
+                    name_server.register('bala', uri)
+                except Exception as err:
+                    p4_args.logger.error(err)
 
         p4_args.logger.info('simple_netem Pyro4 daemon running...')
         p4_daemon.requestLoop()
@@ -279,7 +286,7 @@ def _get_args(description=config.DESCRIPTION, epilog=config.EPILOG):
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         '-v', '--version', action='version',
-        version='simple_netem package {}'.format(__version__),
+        version='simple_netem package {}'.format(config.__version__),
         help='show the version of %(prog)s')
     parser.add_argument(
         '-s', '--server', action='store', default=config.HOST,
